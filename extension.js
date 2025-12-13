@@ -307,6 +307,22 @@ class DockView extends St.Widget {
             // Override the default activate behavior to properly handle minimized windows
             icon.connect('button-press-event', (actor, event) => {
                 if (event.get_button() === 1) { // Left click
+                    // Animate the icon: scale up then back to normal
+                    icon.set_pivot_point(0.5, 0.5);
+                    icon.ease({
+                        scale_x: 1.2,
+                        scale_y: 1.2,
+                        duration: 100,
+                        mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                        onComplete: () => {
+                            icon.ease({
+                                scale_x: 1.0,
+                                scale_y: 1.0,
+                                duration: 150,
+                                mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
+                            });
+                        }
+                    });
                     this._activateApp(app);
                     return Clutter.EVENT_STOP;
                 }
