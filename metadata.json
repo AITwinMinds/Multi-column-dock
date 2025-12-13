@@ -1,13 +1,13 @@
 {
   "name": "Multi-Column Dock",
-  "description": "A novel multi-column dock for GNOME Shell.",
+  "description": "A sleek, customizable multi-column dock extension for GNOME Shell with smooth scrolling, drag & drop reordering, and multi-monitor support.\n\n✨ Features:\n• Multi-column layout\n• Smooth scrolling\n• Customizable appearance\n• Drag & drop reordering\n• Multi-monitor support\n\n👤 Author: AITwinMinds\n📧 Email: AITwinMinds@gmail.com\n🌐 GitHub: github.com/AITwinMinds\n🐦 Twitter: @AITwinMinds\n🎥 YouTube: youtube.com/@AITwinMinds\n📣 Telegram: t.me/AITwinMinds\n📸 Instagram: @AITwinMinds",
   "uuid": "multi-column-dock@ali.example.com",
   "shell-version": [
     "45",
     "46",
     "47"
   ],
-  "url": "",
+  "url": "https://github.com/AITwinMinds/Multi-column-dock",
   "settings-schema": "org.gnome.shell.extensions.twocolumndock",
   "version": 1
 }
