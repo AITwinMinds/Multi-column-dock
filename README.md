@@ -16,6 +16,10 @@ A sleek, customizable multi-column dock extension for GNOME Shell that brings a 
 - **Integrated Show Apps Button** – Quick access to the GNOME app grid
 - **Tooltips** – Hover over icons to see app names
 
+<img width="1068" height="1080" alt="Screenshot from 2025-12-13 16-11-57" src="https://github.com/user-attachments/assets/8ce7dc99-a030-4070-afd8-90b80b30b0a3" />
+<img width="1086" height="1078" alt="Screenshot from 2025-12-13 16-13-12" src="https://github.com/user-attachments/assets/033e3703-c121-401d-9c59-224b2042cce5" />
+
+
 ## 📦 Installation
 
 ### From Source
@@ -58,7 +62,7 @@ A sleek, customizable multi-column dock extension for GNOME Shell that brings a 
 ## ⚙️ Configuration
 
 Open the extension preferences to customize:
-
+<img width="762" height="741" alt="Screenshot from 2025-12-13 16-13-55" src="https://github.com/user-attachments/assets/59b49c92-d46b-48de-99b3-8133b6f0d689" />
 - **Columns**: Set the number of columns (1-4)
 - **Icon Size**: Adjust the size of app icons
 - **Background Color**: Choose your preferred dock background color
