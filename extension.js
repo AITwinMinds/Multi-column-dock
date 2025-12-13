@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
@@ -9,6 +10,117 @@ import * as AppFavorites from 'resource:///org/gnome/shell/ui/appFavorites.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { AppIcon } from 'resource:///org/gnome/shell/ui/appDisplay.js';
+
+// Unity Launcher API DBus interface for notification badges
+const LauncherEntryIface = `
+<node>
+  <interface name="com.canonical.Unity.LauncherEntry">
+    <signal name="Update">
+      <arg type="s" name="app_uri"/>
+      <arg type="a{sv}" name="properties"/>
+    </signal>
+  </interface>
+</node>`;
+
+// Badge Manager - listens to Unity Launcher Entry signals
+class BadgeManager {
+    constructor() {
+        this._badges = new Map(); // appId -> { count: number, urgent: boolean }
+        this._listeners = new Set();
+        this._dbusConnection = null;
+        this._signalId = 0;
+        
+        this._initDBus();
+    }
+
+    _initDBus() {
+        try {
+            this._dbusConnection = Gio.bus_get_sync(Gio.BusType.SESSION, null);
+            
+            // Listen for Unity LauncherEntry Update signals
+            this._signalId = this._dbusConnection.signal_subscribe(
+                null, // sender
+                'com.canonical.Unity.LauncherEntry',
+                'Update',
+                null, // object path
+                null, // arg0
+                Gio.DBusSignalFlags.NONE,
+                this._onUpdate.bind(this)
+            );
+        } catch (e) {
+            log(`[Multi-Column Dock] Failed to init DBus for badges: ${e.message}`);
+        }
+    }
+
+    _onUpdate(connection, sender, objectPath, interfaceName, signalName, parameters) {
+        try {
+            let [appUri, props] = parameters.deep_unpack();
+            
+            // appUri is like "application://org.telegram.desktop.desktop"
+            // Convert to app ID: "org.telegram.desktop.desktop"
+            let appId = appUri.replace('application://', '');
+            
+            let count = 0;
+            let countVisible = false;
+            let urgent = false;
+            
+            if (props['count']) {
+                count = props['count'].deep_unpack();
+            }
+            if (props['count-visible']) {
+                countVisible = props['count-visible'].deep_unpack();
+            }
+            if (props['urgent']) {
+                urgent = props['urgent'].deep_unpack();
+            }
+            
+            if (countVisible && count > 0) {
+                this._badges.set(appId, { count, urgent });
+            } else {
+                this._badges.delete(appId);
+            }
+            
+            // Notify listeners
+            this._notifyListeners(appId);
+        } catch (e) {
+            log(`[Multi-Column Dock] Error parsing badge update: ${e.message}`);
+        }
+    }
+
+    getBadge(appId) {
+        return this._badges.get(appId) || null;
+    }
+
+    addListener(callback) {
+        this._listeners.add(callback);
+    }
+
+    removeListener(callback) {
+        this._listeners.delete(callback);
+    }
+
+    _notifyListeners(appId) {
+        for (let callback of this._listeners) {
+            try {
+                callback(appId);
+            } catch (e) {
+                log(`[Multi-Column Dock] Badge listener error: ${e.message}`);
+            }
+        }
+    }
+
+    destroy() {
+        if (this._dbusConnection && this._signalId) {
+            this._dbusConnection.signal_unsubscribe(this._signalId);
+            this._signalId = 0;
+        }
+        this._badges.clear();
+        this._listeners.clear();
+    }
+}
+
+// Global badge manager instance
+let badgeManager = null;
 
 const DockView = GObject.registerClass(
 class DockView extends St.Widget {
@@ -164,6 +276,13 @@ class DockView extends St.Widget {
         this.set_position(monitor.x, monitor.y + panelHeight);
         this.set_height(monitor.height - panelHeight); 
 
+        // Badge tracking
+        this._iconBadges = new Map(); // appId -> { icon, badge }
+        this._badgeListener = this._onBadgeUpdate.bind(this);
+        if (badgeManager) {
+            badgeManager.addListener(this._badgeListener);
+        }
+
         // Connect settings
         this._settingsChangedId = this._settings.connect('changed', this._redisplay.bind(this));
         this._favoritesChangedId = this._appFavorites.connect('changed', this._redisplay.bind(this));
@@ -201,6 +320,12 @@ class DockView extends St.Widget {
     }
 
     _onDestroy() {
+        // Remove badge listener
+        if (badgeManager && this._badgeListener) {
+            badgeManager.removeListener(this._badgeListener);
+        }
+        this._iconBadges.clear();
+
         if (this._settingsChangedId) {
             this._settings.disconnect(this._settingsChangedId);
             this._settingsChangedId = 0;
@@ -223,9 +348,49 @@ class DockView extends St.Widget {
         }
     }
 
+    _onBadgeUpdate(appId) {
+        // Update badge for specific app if we have it
+        let entry = this._iconBadges.get(appId);
+        if (entry) {
+            this._updateBadge(entry.icon, entry.badge, appId);
+        }
+    }
+
+    _updateBadge(icon, badge, appId) {
+        let badgeInfo = badgeManager ? badgeManager.getBadge(appId) : null;
+        
+        if (badgeInfo && badgeInfo.count > 0) {
+            let text = badgeInfo.count > 99 ? '99+' : badgeInfo.count.toString();
+            badge.set_text(text);
+            badge.show();
+            
+            // Add urgent styling if needed
+            if (badgeInfo.urgent) {
+                badge.add_style_class_name('dock-badge-urgent');
+            } else {
+                badge.remove_style_class_name('dock-badge-urgent');
+            }
+        } else {
+            badge.hide();
+        }
+    }
+
+    _createBadge() {
+        return new St.Label({
+            style_class: 'dock-badge',
+            text: '',
+            visible: false,
+            x_align: Clutter.ActorAlign.END,
+            y_align: Clutter.ActorAlign.START,
+            x_expand: true,
+            y_expand: true,
+        });
+    }
+
     _redisplay() {
         // Clear existing children
         this._grid.destroy_all_children();
+        this._iconBadges.clear();
 
         const columns = this._settings.get_int('columns');
         const iconSize = this._settings.get_int('icon-size');
@@ -349,6 +514,17 @@ class DockView extends St.Widget {
                     this._hideTooltip();
                 }
             });
+
+            // Create notification badge
+            let appId = app.get_id();
+            let badge = this._createBadge();
+            icon.add_child(badge);
+            
+            // Store reference for updates
+            this._iconBadges.set(appId, { icon, badge });
+            
+            // Initialize badge state
+            this._updateBadge(icon, badge, appId);
 
             // Add to grid
             layout.attach(icon, col, row, 1, 1);
@@ -534,6 +710,9 @@ export default class TwoColumnDockExtension extends Extension {
         this._settings = this.getSettings();
         this._docks = [];
         
+        // Initialize badge manager for notification counts
+        badgeManager = new BadgeManager();
+        
         this._createDocks();
         
         // Monitor changes to update position if resolution changes
@@ -669,6 +848,12 @@ export default class TwoColumnDockExtension extends Extension {
                 dock.destroy();
             });
             this._docks = [];
+        }
+        
+        // Cleanup badge manager
+        if (badgeManager) {
+            badgeManager.destroy();
+            badgeManager = null;
         }
         
         if (this._originalDash) {

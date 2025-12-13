@@ -77,3 +77,22 @@
     font-size: 14px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.5);
 }
+
+/* Notification badge */
+.dock-badge {
+    background-color: #e74c3c;
+    color: white;
+    border-radius: 8px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: bold;
+    min-width: 14px;
+    text-align: center;
+    margin: 2px 2px 0 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.dock-badge-urgent {
+    background-color: #ff0000;
+    animation: pulse 1s infinite;
+}
