@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Name of the extension UUID
-UUID="multi-column-dock@ali.example.com"
+UUID="AITwinMinds@gmail.com"
 ZIP_NAME="multi-column-dock.zip"
 
 echo "Compiling schemas..."

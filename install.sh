@@ -1,6 +1,6 @@
 #!/bin/bash
 
-UUID="multi-column-dock@ali.example.com"
+UUID="AITwinMinds@gmail.com"
 ZIP_NAME="multi-column-dock.zip"
 INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$UUID"
 
