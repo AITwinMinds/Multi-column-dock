@@ -56,14 +56,26 @@ class DockView extends St.Widget {
         // Removed background-color from here to apply custom styling
         this._grid.set_style('padding: 2px;');
 
-        this.add_child(this._grid);
+        // Container for the grid inside ScrollView (BoxLayout is more compatible)
+        this._scrollContent = new St.BoxLayout({
+            vertical: true,
+            x_expand: true,
+            y_expand: false,
+        });
+        this._scrollContent.add_child(this._grid);
 
-        // Spacer to push the Show Apps button to the bottom of the screen
-        this._spacer = new St.Widget({
+        // ScrollView to enable scrolling when there are many apps
+        this._scrollView = new St.ScrollView({
+            style_class: 'dock-scroll-view',
+            hscrollbar_policy: St.PolicyType.NEVER,
+            vscrollbar_policy: St.PolicyType.AUTOMATIC,
+            overlay_scrollbars: true,
             x_expand: true,
             y_expand: true,
         });
-        this.add_child(this._spacer);
+        this._scrollView.set_child(this._scrollContent);
+
+        this.add_child(this._scrollView);
 
         // Show Apps button (sits at the bottom of the screen)
         this._showAppsIcon = new St.Icon({
@@ -404,8 +416,6 @@ class DockView extends St.Widget {
         let tooltipY = Math.round(y + (h / 2) - (natH / 2));
 
         this._tooltip.set_position(tooltipX, tooltipY);
-        // Ensure on top of everything
-        this._tooltip.raise_top();
     }
 
     _hideTooltip() {

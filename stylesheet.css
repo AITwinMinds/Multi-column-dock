@@ -37,9 +37,28 @@
     box-shadow: none;
 }
 
-.dock-scrollview {
+.dock-scroll-view {
     padding: 0;
     margin: 0;
+}
+
+/* Hide the scrollbar completely for a cleaner look */
+.dock-scroll-view StScrollBar {
+    width: 0;
+    min-width: 0;
+    background-color: transparent;
+}
+
+.dock-scroll-view StScrollBar StButton#vhandle,
+.dock-scroll-view StScrollBar StButton#hhandle {
+    background-color: transparent;
+    width: 0;
+    min-width: 0;
+}
+
+.dock-scroll-view StScrollBar StButton#vhandle:hover,
+.dock-scroll-view StScrollBar StButton#hhandle:hover {
+    background-color: transparent;
 }
 
 /* Ensure icons are centered */
