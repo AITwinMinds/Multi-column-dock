@@ -473,9 +473,56 @@ class DockView extends St.Widget {
             // Set pivot point for animation (center of the icon)
             icon.set_pivot_point(0.5, 0.5);
 
-            // Create a wrapper to capture all clicks reliably
-            let clickAction = new Clutter.ClickAction();
-            clickAction.connect('clicked', () => {
+            // Track drag state and click timing to distinguish clicks from drags
+            let dragStarted = false;
+            let pressTime = 0;
+            let pressX = 0;
+            let pressY = 0;
+            
+            // Connect to the icon's internal drag actor if available
+            if (icon._draggable) {
+                icon._draggable.connect('drag-begin', () => {
+                    dragStarted = true;
+                });
+                icon._draggable.connect('drag-end', () => {
+                    // Keep dragStarted true briefly to prevent button-release from triggering
+                    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                        dragStarted = false;
+                        return GLib.SOURCE_REMOVE;
+                    });
+                });
+            }
+
+            // Track button press for click detection
+            icon.connect('button-press-event', (actor, event) => {
+                if (event.get_button() === 1) {
+                    pressTime = GLib.get_monotonic_time();
+                    [pressX, pressY] = event.get_coords();
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
+
+            // Use button-release-event for click animation (doesn't block drag-and-drop)
+            icon.connect('button-release-event', (actor, event) => {
+                if (event.get_button() !== 1) {
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                
+                // Skip if drag occurred
+                if (dragStarted) {
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                
+                // Check if this was a quick click (not a drag attempt)
+                let elapsed = GLib.get_monotonic_time() - pressTime;
+                let [releaseX, releaseY] = event.get_coords();
+                let distance = Math.sqrt(Math.pow(releaseX - pressX, 2) + Math.pow(releaseY - pressY, 2));
+                
+                // If held too long or moved too far, it was likely a drag attempt
+                if (elapsed > 300000 || distance > 10) { // 300ms or 10px
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                
                 // Animate the icon: scale up then back to normal
                 icon.ease({
                     scale_x: 1.3,
@@ -496,8 +543,8 @@ class DockView extends St.Widget {
                     this._activateApp(app);
                     return GLib.SOURCE_REMOVE;
                 });
+                return Clutter.EVENT_STOP;
             });
-            icon.add_action(clickAction);
 
             // Tooltip logic (use enter/leave for reliability)
             icon.connect('enter-event', () => {
