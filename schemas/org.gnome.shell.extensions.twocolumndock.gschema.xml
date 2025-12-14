@@ -26,6 +26,11 @@
       <summary>Corner Radius</summary>
       <description>Corner radius of the dock background.</description>
     </key>
+    <key name="group-corner-radius" type="i">
+      <default>6</default>
+      <summary>Group Corner Radius</summary>
+      <description>Corner radius of group borders.</description>
+    </key>
     <key name="show-on-all-monitors" type="b">
       <default>false</default>
       <summary>Show on all monitors</summary>
@@ -55,6 +60,11 @@
       <default>true</default>
       <summary>Show Ungrouped Apps</summary>
       <description>If true, apps not assigned to any group will be shown in an "Other" section.</description>
+    </key>
+    <key name="scale-factor" type="d">
+      <default>0.0</default>
+      <summary>Scale Factor</summary>
+      <description>Manual scale factor override for HiDPI displays. Set to 0 for automatic detection based on display resolution. Values between 1.0 and 3.0 are typical. For 4K displays, try 1.5-2.0.</description>
     </key>
   </schema>
 </schemalist>

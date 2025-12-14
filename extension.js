@@ -5,6 +5,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
+import Pango from 'gi://Pango';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as AppFavorites from 'resource:///org/gnome/shell/ui/appFavorites.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
@@ -133,10 +134,91 @@ function parseHexColor(hex) {
     return { r, g, b };
 }
 
+// ScaleManager - handles dynamic scaling for HiDPI/4K displays
+class ScaleManager {
+    constructor(settings) {
+        this._settings = settings;
+    }
+
+    // Get the effective scale factor based on display and settings
+    getScaleFactor() {
+        // Check if user has set a manual scale factor
+        const manualScale = this._settings.get_double('scale-factor');
+        if (manualScale > 0) {
+            return manualScale;
+        }
+
+        // Use GNOME Shell's built-in scale factor - this already handles HiDPI properly
+        // No need to calculate our own - GNOME does this correctly
+        let themeScale = 1.0;
+        try {
+            const themeContext = St.ThemeContext.get_for_stage(global.stage);
+            if (themeContext) {
+                themeScale = themeContext.scale_factor;
+            }
+        } catch (e) {
+            log(`[Multi-Column Dock] Error getting theme scale: ${e.message}`);
+        }
+
+        return themeScale;
+    }
+
+    // Get scaled value for a dimension (UI elements like margins, padding)
+    scale(baseValue) {
+        return Math.round(baseValue * this.getScaleFactor());
+    }
+
+    // Get icon size - use base setting directly, GNOME handles icon scaling
+    getScaledIconSize() {
+        // Return the user's icon-size setting directly
+        // GNOME Shell already handles HiDPI scaling for icons internally
+        return this._settings.get_int('icon-size');
+    }
+
+    // Get padding for icons - minimal scaling needed
+    getScaledPadding() {
+        const basePadding = 8;
+        return Math.round(basePadding * this.getScaleFactor());
+    }
+
+    // Get scaled font size - keep reasonable bounds
+    getScaledFontSize(baseFontSize) {
+        // Don't over-scale fonts - GNOME already handles font scaling
+        // Just apply a modest scale factor
+        const scaleFactor = this.getScaleFactor();
+        const scaled = Math.round(baseFontSize * Math.min(scaleFactor, 1.5));
+        return Math.max(9, Math.min(scaled, 16)); // Tighter bounds: 9-16px
+    }
+
+    // Get scaled border radius
+    getScaledBorderRadius(baseRadius) {
+        return Math.round(baseRadius * this.getScaleFactor());
+    }
+
+    // Get scaled margin/spacing
+    getScaledSpacing(baseSpacing) {
+        return Math.round(baseSpacing * this.getScaleFactor());
+    }
+
+    // Get current monitor info for debugging
+    getMonitorInfo() {
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (monitor) {
+            return {
+                width: monitor.width,
+                height: monitor.height,
+                scaleFactor: this.getScaleFactor(),
+                themeScale: St.ThemeContext.get_for_stage(global.stage)?.scale_factor || 1,
+            };
+        }
+        return null;
+    }
+}
+
 // Group Container Widget - Visual container for a group of apps
 const GroupContainer = GObject.registerClass(
 class GroupContainer extends St.BoxLayout {
-    _init(group, settings, dockView) {
+    _init(group, settings, dockView, scaleManager) {
         super._init({
             vertical: true,
             style_class: 'dock-group-container',
@@ -148,10 +230,15 @@ class GroupContainer extends St.BoxLayout {
         this._group = group;
         this._settings = settings;
         this._dockView = dockView;
+        this._scaleManager = scaleManager;
         this._collapsed = group.collapsed || false;
         
         // Enable DND
         this._delegate = this;
+
+        // Get scaled values
+        const scaledCollapseIconSize = this._scaleManager.scale(12);
+        const endPadding = this._scaleManager.getScaledSpacing(6);
 
         // Create header (clickable to collapse/expand)
         this._header = new St.BoxLayout({
@@ -165,7 +252,7 @@ class GroupContainer extends St.BoxLayout {
         this._collapseIcon = new St.Icon({
             icon_name: this._collapsed ? 'pan-end-symbolic' : 'pan-down-symbolic',
             style_class: 'dock-group-collapse-icon',
-            icon_size: 12,
+            icon_size: scaledCollapseIconSize,
         });
         this._header.add_child(this._collapseIcon);
 
@@ -196,6 +283,9 @@ class GroupContainer extends St.BoxLayout {
             x_expand: true,
         });
 
+        // Keep layout tight but add a bit of breathing room under the icons
+        this._contentBox.set_style(`padding: 0 0 ${endPadding}px 0; spacing: 0px;`);
+
         this._grid = new St.Widget({
             layout_manager: new Clutter.GridLayout({
                 orientation: Clutter.Orientation.HORIZONTAL,
@@ -205,7 +295,7 @@ class GroupContainer extends St.BoxLayout {
             style_class: 'dock-group-grid',
             x_expand: true,
         });
-        this._grid.set_x_align(Clutter.ActorAlign.START);
+        this._grid.set_x_align(Clutter.ActorAlign.CENTER);
         this._grid.set_y_align(Clutter.ActorAlign.START);
 
         this._contentBox.add_child(this._grid);
@@ -226,31 +316,55 @@ class GroupContainer extends St.BoxLayout {
         const opacity = group.opacity !== undefined ? group.opacity : 0.8;
         const borderColor = parseHexColor(group.borderColor || '#444444');
         const borderWidth = group.borderWidth !== undefined ? group.borderWidth : 1;
-        const headerSize = this._settings.get_int('group-header-size');
+
+        // Use fixed pixel values - GNOME Shell already handles HiDPI scaling
+        // Don't apply additional scaling to avoid double-scaling
+        const baseRadius = this._settings.get_int('group-corner-radius');
+        const borderRadius = Math.max(0, baseRadius);
+        const margin = 2;
+        const paddingH = 4;
+        const paddingV = 2;
+        
+        // Dynamic sizing based on icon size
+        // If icons are large (e.g. 4K), scale up the header slightly
+        const iconSize = this._settings.get_int('icon-size');
+        const isLarge = iconSize > 48;
+        
+        const headerHeight = isLarge ? 28 : 20;
+        const fontSize = isLarge ? 13 : 11;
+        const collapseIconMargin = 3;
 
         // Style the container with background and border
-        // Use margin-right to ensure border is visible
         this.set_style(`
             background-color: rgba(${r}, ${g}, ${b}, ${opacity});
             border: ${borderWidth}px solid rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, 0.8);
-            border-radius: 8px;
-            margin: 2px 6px 2px 4px;
+            border-radius: ${borderRadius}px;
+            margin: ${margin}px;
             padding: 0;
+            spacing: 0px;
         `);
 
-        // Style the header
+        // Style the header - compact, no extra space
         this._header.set_style(`
-            padding: 4px 8px;
-            min-height: ${headerSize}px;
+            padding: ${paddingV}px ${paddingH}px;
+            min-height: ${headerHeight}px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         `);
 
-        // Style the label with group color hint
+        // Style the collapse icon
+        this._collapseIcon.set_style(`
+            margin-right: ${collapseIconMargin}px;
+        `);
+
+        // Style the label - small font
         this._label.set_style(`
             font-weight: bold;
-            font-size: 11px;
+            font-size: ${fontSize}px;
             color: rgba(255, 255, 255, 0.9);
         `);
+        
+        // Set label to clip overflow with ellipsis
+        this._label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
     }
 
     _toggleCollapse() {
@@ -300,7 +414,8 @@ class GroupContainer extends St.BoxLayout {
 
     // DND support for dropping apps into this group
     handleDragOver(source, actor, x, y, time) {
-        if (source instanceof AppIcon) {
+        // Check for .app property (our custom wrapper) or AppIcon
+        if (source.app || source instanceof AppIcon) {
             this.add_style_class_name('dock-group-drop-target');
             return DND.DragMotionResult.MOVE_DROP;
         }
@@ -310,15 +425,48 @@ class GroupContainer extends St.BoxLayout {
     acceptDrop(source, actor, x, y, time) {
         this.remove_style_class_name('dock-group-drop-target');
         
-        if (source instanceof AppIcon) {
-            let app = source.app;
-            if (!app) return false;
-            
-            let appId = app.get_id();
-            
-            // Add app to this group
-            this._dockView._moveAppToGroup(appId, this._group.id);
-            
+        // Check for .app property (our custom wrapper) or AppIcon
+        if (source.app || source instanceof AppIcon) {
+            const app = source.app || source._app;
+            if (!app)
+                return false;
+
+            const appId = app.get_id();
+            const metrics = this._dockView?._layoutMetrics;
+            const columns = metrics?.columns ?? this._settings.get_int('columns');
+            const totalIconSize = metrics?.totalIconSize ?? this._settings.get_int('icon-size');
+            const cellSpacing = metrics?.cellSpacing ?? 6;
+            const cellSize = totalIconSize + cellSpacing;
+
+            // Robust coordinate handling: use stage pointer and transform into grid-local coords.
+            let localX = x;
+            let localY = y;
+            try {
+                const [stageX, stageY] = global.get_pointer();
+                const [ok, gridLocalX, gridLocalY] = this._grid.transform_stage_point(stageX, stageY);
+                if (ok) {
+                    localX = gridLocalX;
+                    localY = gridLocalY;
+                }
+            } catch (e) {
+                // Fallback to provided coords
+            }
+
+            let col = Math.floor(localX / cellSize);
+            let row = Math.floor(localY / cellSize);
+
+            if (col < 0) col = 0;
+            if (col >= columns) col = columns - 1;
+            if (row < 0) row = 0;
+
+            let position = row * columns + col;
+
+            // Clamp to valid range (allow append)
+            const currentLen = Array.isArray(this._group.apps) ? this._group.apps.length : 0;
+            if (position > currentLen)
+                position = currentLen;
+
+            this._dockView._moveAppToGroup(appId, this._group.id, position);
             return true;
         }
         return false;
@@ -340,6 +488,9 @@ class DockView extends St.Widget {
         this._appFavorites = AppFavorites.getAppFavorites();
         this._groups = [];
         this._groupContainers = new Map();
+        
+        // Initialize ScaleManager for HiDPI support
+        this._scaleManager = new ScaleManager(settings);
         
         // Enable Drag and Drop
         this._delegate = this;
@@ -499,6 +650,17 @@ class DockView extends St.Widget {
         if (key === 'app-groups' || key === 'enable-groups' || key === 'show-ungrouped') {
             this._loadGroups();
         }
+        
+        // Trigger redisplay for scale-factor changes or other display settings
+        if (key === 'scale-factor' || key === 'icon-size' || key === 'columns' || 
+            key === 'group-header-size' || key === 'group-spacing') {
+            // Log scale factor change for debugging
+            if (key === 'scale-factor') {
+                const newScale = this._settings.get_double('scale-factor');
+                log(`[Multi-Column Dock] Scale factor changed to: ${newScale === 0 ? 'Auto' : newScale}`);
+            }
+        }
+        
         this._redisplay();
         
         if (key === 'background-color' || key === 'background-opacity' || key === 'corner-radius') {
@@ -513,6 +675,29 @@ class DockView extends St.Widget {
         } catch (e) {
             log(`[Multi-Column Dock] Error loading groups: ${e.message}`);
             this._groups = [];
+        }
+
+        // Ensure we always have a hidden group to store ungrouped ordering.
+        this._ensureUngroupedOrderGroup();
+    }
+
+    _ensureUngroupedOrderGroup() {
+        const UNGROUPED_ORDER_ID = '__ungrouped_order__';
+        if (!Array.isArray(this._groups))
+            this._groups = [];
+
+        let orderGroup = this._groups.find(g => g && g.id === UNGROUPED_ORDER_ID);
+        if (!orderGroup) {
+            this._groups.push({
+                id: UNGROUPED_ORDER_ID,
+                name: 'Ungrouped Order',
+                hidden: true,
+                apps: [],
+            });
+        } else {
+            orderGroup.hidden = true;
+            if (!Array.isArray(orderGroup.apps))
+                orderGroup.apps = [];
         }
     }
 
@@ -529,7 +714,12 @@ class DockView extends St.Widget {
         this._saveGroups();
     }
 
-    _moveAppToGroup(appId, groupId) {
+    _moveAppToGroup(appId, groupId, position = -1) {
+        const UNGROUPED_ORDER_ID = '__ungrouped_order__';
+        this._ensureUngroupedOrderGroup();
+
+        const orderGroup = this._groups.find(g => g && g.id === UNGROUPED_ORDER_ID);
+
         // Remove app from all groups first
         for (let group of this._groups) {
             if (group.apps) {
@@ -537,12 +727,26 @@ class DockView extends St.Widget {
             }
         }
 
-        // Add to target group (if not 'ungrouped')
-        if (groupId !== 'ungrouped') {
+        // If dropping into the special "Other" section, store order in the hidden order group.
+        if (groupId === 'ungrouped') {
+            if (orderGroup) {
+                const list = orderGroup.apps;
+                // Insert at specific position or append
+                if (position >= 0 && position <= list.length)
+                    list.splice(position, 0, appId);
+                else
+                    list.push(appId);
+            }
+        } else {
+            // Add to target visible group
             let targetGroup = this._groups.find(g => g.id === groupId);
             if (targetGroup) {
                 if (!targetGroup.apps) targetGroup.apps = [];
-                targetGroup.apps.push(appId);
+
+                if (position >= 0 && position < targetGroup.apps.length)
+                    targetGroup.apps.splice(position, 0, appId);
+                else
+                    targetGroup.apps.push(appId);
             }
         }
 
@@ -556,10 +760,14 @@ class DockView extends St.Widget {
         let radius = this._settings.get_int('corner-radius');
 
         const { r, g, b } = parseHexColor(hex);
+        
+        // Scale the corner radius
+        const scaleFactor = this._scaleManager.getScaleFactor();
+        const scaledRadius = Math.round(radius * scaleFactor);
 
         this.set_style(`
             background-color: rgba(${r}, ${g}, ${b}, ${opacity});
-            border-radius: 0 ${radius}px ${radius}px 0;
+            border-radius: 0 ${scaledRadius}px ${scaledRadius}px 0;
         `);
     }
 
@@ -617,7 +825,15 @@ class DockView extends St.Widget {
     }
 
     _createBadge() {
-        return new St.Label({
+        // Create badge with scaled dimensions
+        const scaledFontSize = this._scaleManager.getScaledFontSize(10);
+        const scaledBorderRadius = this._scaleManager.getScaledBorderRadius(8);
+        const scaledPaddingV = this._scaleManager.getScaledSpacing(1);
+        const scaledPaddingH = this._scaleManager.getScaledSpacing(5);
+        const scaledMinWidth = this._scaleManager.scale(14);
+        const scaledMargin = this._scaleManager.getScaledSpacing(2);
+        
+        const badge = new St.Label({
             style_class: 'dock-badge',
             text: '',
             visible: false,
@@ -626,6 +842,21 @@ class DockView extends St.Widget {
             x_expand: true,
             y_expand: true,
         });
+        
+        badge.set_style(`
+            background-color: #e74c3c;
+            color: white;
+            border-radius: ${scaledBorderRadius}px;
+            padding: ${scaledPaddingV}px ${scaledPaddingH}px;
+            font-size: ${scaledFontSize}px;
+            font-weight: bold;
+            min-width: ${scaledMinWidth}px;
+            text-align: center;
+            margin: ${scaledMargin}px ${scaledMargin}px 0 0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+        `);
+        
+        return badge;
     }
 
     _redisplay() {
@@ -663,50 +894,88 @@ class DockView extends St.Widget {
             }
         });
 
-        // Calculate dimensions
-        const itemPadding = 12; 
-        const totalIconSize = iconSize + itemPadding;
-        const dockPadding = 4;
-        // Add extra width for group borders and margins when groups are enabled
-        const groupMargin = enableGroups ? 16 : 0;
-        const totalWidth = (totalIconSize * columns) + (dockPadding * 2) + groupMargin;
+        // Add padding around icons for breathing room
+        // The padding is part of the clickable/hover area
+        const iconPadding = Math.max(15, Math.round(iconSize * 0.30));
+        const totalIconSize = iconSize + iconPadding;
+        
+        // Additional spacing between cells in the grid
+        const cellSpacing = 0;
+
+        // Store metrics so DND uses the exact same numbers everywhere
+        this._layoutMetrics = { columns, iconSize, totalIconSize, cellSpacing };
+        
+        // Calculate dock width with generous buffer
+        let totalWidth;
+        if (enableGroups) {
+            // Add space for group margins (2px each side) and borders (1-2px each side)
+            // Plus extra buffer to prevent right-side cutoff
+            const groupMargin = 4; // 2px margin on each side
+            const groupBorder = 4; // border allowance
+            const safetyBuffer = 16; // Extra space for scrollbars/rendering quirks
+            totalWidth = (totalIconSize * columns) + (cellSpacing * Math.max(0, columns - 1)) + groupMargin + groupBorder + safetyBuffer;
+        } else {
+            totalWidth = (totalIconSize * columns) + (cellSpacing * Math.max(0, columns - 1)) + 16;
+        }
         
         this.set_width(totalWidth);
 
         // Size Show Apps button
         if (this._showAppsButton) {
             this._showAppsButton.set_size(totalIconSize, totalIconSize);
-            this._showAppsButton.set_style('border: none; box-shadow: none; padding: 6px; margin: 6px auto 8px auto;');
+            this._showAppsButton.set_style(`border: none; box-shadow: none; padding: 2px; margin: 4px auto 6px auto;`);
         }
         if (this._showAppsIcon && typeof this._showAppsIcon.set_icon_size === 'function') {
             this._showAppsIcon.set_icon_size(iconSize);
         }
 
+        // Update tooltip styling
+        this._updateTooltipStyle();
+
         if (enableGroups && this._groups.length > 0) {
             // GROUP MODE: Render apps organized by groups
-            this._renderGroupedApps(allApps, columns, iconSize, totalIconSize, showUngrouped, groupSpacing);
+            this._renderGroupedApps(allApps, columns, iconSize, totalIconSize, showUngrouped, groupSpacing, cellSpacing);
         } else {
             // LEGACY MODE: Render apps in a simple grid
-            this._renderSimpleGrid(allApps, columns, iconSize, totalIconSize);
+            this._renderSimpleGrid(allApps, columns, iconSize, totalIconSize, cellSpacing);
         }
 
         this.add_style_class_name('two-column-dock-container');
         this.queue_relayout();
     }
 
-    _renderSimpleGrid(apps, columns, iconSize, totalIconSize) {
+    _updateTooltipStyle() {
+        const scaleFactor = this._scaleManager.getScaleFactor();
+        const fontSize = Math.round(12 * Math.min(scaleFactor, 1.25));
+        const paddingV = Math.round(4 * scaleFactor);
+        const paddingH = Math.round(8 * scaleFactor);
+        const borderRadius = Math.round(4 * scaleFactor);
+        
+        this._tooltip.set_style(`
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            border-radius: ${borderRadius}px;
+            padding: ${paddingV}px ${paddingH}px;
+            text-align: center;
+            font-weight: bold;
+            font-size: ${fontSize}px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        `);
+    }
+
+    _renderSimpleGrid(apps, columns, iconSize, totalIconSize, cellSpacing) {
         // Create the legacy grid
         this._grid = new St.Widget({
             layout_manager: new Clutter.GridLayout({
                 orientation: Clutter.Orientation.HORIZONTAL,
-                column_spacing: 0,
-                row_spacing: 0,
+                column_spacing: cellSpacing,
+                row_spacing: cellSpacing,
             }),
             style_class: 'dock-grid',
         });
         this._grid.set_x_align(Clutter.ActorAlign.START);
         this._grid.set_y_align(Clutter.ActorAlign.START);
-        this._grid.set_style('padding: 2px;');
+        this._grid.set_style(`padding: 2px;`);
 
         const layout = this._grid.layout_manager;
         layout.set_column_homogeneous(true);
@@ -729,7 +998,7 @@ class DockView extends St.Widget {
         this._mainContainer.add_child(this._grid);
     }
 
-    _renderGroupedApps(apps, columns, iconSize, totalIconSize, showUngrouped, groupSpacing) {
+    _renderGroupedApps(apps, columns, iconSize, totalIconSize, showUngrouped, groupSpacing, cellSpacing) {
         // Create a map of appId -> app for quick lookup
         const appMap = new Map();
         apps.forEach(app => appMap.set(app.get_id(), app));
@@ -737,8 +1006,16 @@ class DockView extends St.Widget {
         // Track which apps are assigned to groups
         const assignedApps = new Set();
 
-        // Render each group
+        // Group spacing - minimal scaling
+        const scaleFactor = this._scaleManager.getScaleFactor();
+        const scaledGroupSpacing = Math.round(groupSpacing * scaleFactor);
+
+        const UNGROUPED_ORDER_ID = '__ungrouped_order__';
+
+        // Render each visible group
         for (let group of this._groups) {
+            if (!group || group.hidden || group.id === UNGROUPED_ORDER_ID)
+                continue;
             let groupApps = [];
             
             if (group.apps && group.apps.length > 0) {
@@ -753,16 +1030,25 @@ class DockView extends St.Widget {
 
             // Only render group if it has apps or is explicitly shown
             if (groupApps.length > 0 || group.showEmpty) {
-                let groupContainer = new GroupContainer(group, this._settings, this);
+                let groupContainer = new GroupContainer(group, this._settings, this, this._scaleManager);
                 this._groupContainers.set(group.id, groupContainer);
 
                 // Add spacing between groups
-                groupContainer.set_style(groupContainer.get_style() + ` margin-bottom: ${groupSpacing}px;`);
+                groupContainer.set_style(groupContainer.get_style() + ` margin-bottom: ${scaledGroupSpacing}px;`);
 
                 // Populate the group's grid
                 if (!groupContainer.isCollapsed()) {
                     let grid = groupContainer.getGrid();
                     let layout = grid.layout_manager;
+                    // Provide spacing via the grid, not via oversized AppIcon actors.
+                    if (typeof layout.set_column_spacing === 'function')
+                        layout.set_column_spacing(cellSpacing);
+                    else
+                        layout.column_spacing = cellSpacing;
+                    if (typeof layout.set_row_spacing === 'function')
+                        layout.set_row_spacing(cellSpacing);
+                    else
+                        layout.row_spacing = cellSpacing;
                     layout.set_column_homogeneous(true);
                     layout.set_row_homogeneous(true);
 
@@ -790,6 +1076,21 @@ class DockView extends St.Widget {
             let ungroupedApps = apps.filter(app => !assignedApps.has(app.get_id()));
             
             if (ungroupedApps.length > 0) {
+                // Apply persistent ordering for ungrouped apps
+                const orderGroup = this._groups.find(g => g && g.id === UNGROUPED_ORDER_ID);
+                const order = Array.isArray(orderGroup?.apps) ? orderGroup.apps : [];
+                const ungroupedMap = new Map(ungroupedApps.map(a => [a.get_id(), a]));
+                const orderedUngrouped = [];
+                for (const id of order) {
+                    const app = ungroupedMap.get(id);
+                    if (app) {
+                        orderedUngrouped.push(app);
+                        ungroupedMap.delete(id);
+                    }
+                }
+                // Append any remaining untracked apps
+                orderedUngrouped.push(...ungroupedMap.values());
+
                 // Create an "Other" group container
                 let otherGroup = {
                     id: 'ungrouped',
@@ -799,20 +1100,29 @@ class DockView extends St.Widget {
                     borderWidth: 1,
                     opacity: 0.6,
                     collapsed: false,
+                    apps: orderedUngrouped.map(app => app.get_id()),
                 };
 
-                let groupContainer = new GroupContainer(otherGroup, this._settings, this);
+                let groupContainer = new GroupContainer(otherGroup, this._settings, this, this._scaleManager);
                 this._groupContainers.set('ungrouped', groupContainer);
 
                 let grid = groupContainer.getGrid();
                 let layout = grid.layout_manager;
+                if (typeof layout.set_column_spacing === 'function')
+                    layout.set_column_spacing(cellSpacing);
+                else
+                    layout.column_spacing = cellSpacing;
+                if (typeof layout.set_row_spacing === 'function')
+                    layout.set_row_spacing(cellSpacing);
+                else
+                    layout.row_spacing = cellSpacing;
                 layout.set_column_homogeneous(true);
                 layout.set_row_homogeneous(true);
 
                 let col = 0;
                 let row = 0;
 
-                ungroupedApps.forEach(app => {
+                orderedUngrouped.forEach(app => {
                     let icon = this._createAppIcon(app, iconSize, totalIconSize);
                     layout.attach(icon, col, row, 1, 1);
 
@@ -829,20 +1139,89 @@ class DockView extends St.Widget {
     }
 
     _createAppIcon(app, iconSize, totalIconSize) {
-        let icon = new AppIcon(app, {
-            setSizeManually: true,
-            showLabel: false,
+        // Create a simple St.Button wrapper instead of fighting AppIcon's internal layout
+        const inset = Math.max(4, Math.floor((totalIconSize - iconSize) / 2));
+        let wrapper = new St.Button({
+            style_class: 'dock-app-button',
+            reactive: true,
+            can_focus: true,
+            track_hover: true,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
         });
-        
-        if (icon.icon && typeof icon.icon.setIconSize === 'function') {
-            icon.icon.setIconSize(iconSize);
-        }
 
-        icon.set_style('border: none; box-shadow: none; padding: 6px; margin: 0;');
-        icon.set_size(totalIconSize, totalIconSize);
-        icon.set_x_align(Clutter.ActorAlign.CENTER);
-        icon.set_y_align(Clutter.ActorAlign.CENTER);
-        icon.set_pivot_point(0.5, 0.5);
+        // Use an overlay container so we can add a running indicator dot
+        const overlay = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            x_expand: true,
+            y_expand: true,
+        });
+
+        // Put the icon in its own padded container so the running dot can sit
+        // at the true bottom of the button (not above the padding).
+        const iconContainer = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true,
+            y_expand: true,
+        });
+        iconContainer.set_style(`padding: ${inset}px; margin: 0;`);
+
+        // Create a simple St.Icon directly - much simpler than AppIcon
+        let iconWidget = new St.Icon({
+            gicon: app.get_icon(),
+            icon_size: iconSize,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true,
+            y_expand: true,
+        });
+        iconContainer.add_child(iconWidget);
+        overlay.add_child(iconContainer);
+
+        // Running indicator dot (restores the previous "open app" hint)
+        const runningDot = new St.Widget({
+            style_class: 'dock-running-dot',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.END,
+            x_expand: true,
+            y_expand: true,
+        });
+        // Show dot when app has at least one normal window
+        const isRunning = app.get_windows().some(w => !w.skip_taskbar);
+        if (!isRunning)
+            runningDot.hide();
+        overlay.add_child(runningDot);
+
+        wrapper.set_child(overlay);
+        wrapper.app = app; // Store app reference for DND and activation
+        
+        // Style the wrapper
+        wrapper.set_style(`
+            border: none;
+            box-shadow: none;
+            padding: 0;
+            margin: 0;
+            border-radius: 8px;
+        `);
+        wrapper.set_size(totalIconSize, totalIconSize);
+        wrapper.set_pivot_point(0.5, 0.5);
+        
+        // Make it draggable like AppIcon
+        wrapper._draggable = DND.makeDraggable(wrapper);
+        wrapper._delegate = wrapper;
+        
+        // DND methods
+        wrapper.getDragActor = () => {
+            let dragIcon = new St.Icon({
+                gicon: app.get_icon(),
+                icon_size: iconSize,
+            });
+            return dragIcon;
+        };
+        
+        wrapper.getDragActorSource = () => wrapper;
 
         // Drag state tracking
         let dragStarted = false;
@@ -850,19 +1229,17 @@ class DockView extends St.Widget {
         let pressX = 0;
         let pressY = 0;
         
-        if (icon._draggable) {
-            icon._draggable.connect('drag-begin', () => {
-                dragStarted = true;
+        wrapper._draggable.connect('drag-begin', () => {
+            dragStarted = true;
+        });
+        wrapper._draggable.connect('drag-end', () => {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                dragStarted = false;
+                return GLib.SOURCE_REMOVE;
             });
-            icon._draggable.connect('drag-end', () => {
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-                    dragStarted = false;
-                    return GLib.SOURCE_REMOVE;
-                });
-            });
-        }
+        });
 
-        icon.connect('button-press-event', (actor, event) => {
+        wrapper.connect('button-press-event', (actor, event) => {
             if (event.get_button() === 1) {
                 pressTime = GLib.get_monotonic_time();
                 [pressX, pressY] = event.get_coords();
@@ -870,7 +1247,7 @@ class DockView extends St.Widget {
             return Clutter.EVENT_PROPAGATE;
         });
 
-        icon.connect('button-release-event', (actor, event) => {
+        wrapper.connect('button-release-event', (actor, event) => {
             if (event.get_button() !== 1) {
                 return Clutter.EVENT_PROPAGATE;
             }
@@ -887,13 +1264,13 @@ class DockView extends St.Widget {
                 return Clutter.EVENT_PROPAGATE;
             }
             
-            icon.ease({
+            wrapper.ease({
                 scale_x: 1.3,
                 scale_y: 1.3,
                 duration: 80,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onComplete: () => {
-                    icon.ease({
+                    wrapper.ease({
                         scale_x: 1.0,
                         scale_y: 1.0,
                         duration: 120,
@@ -910,28 +1287,21 @@ class DockView extends St.Widget {
         });
 
         // Tooltip
-        icon.connect('enter-event', () => {
-            this._showTooltip(icon, app.get_name());
+        wrapper.connect('enter-event', () => {
+            this._showTooltip(wrapper, app.get_name());
         });
-        icon.connect('leave-event', () => {
+        wrapper.connect('leave-event', () => {
             this._hideTooltip();
-        });
-        icon.connect('notify::hover', () => {
-            if (icon.hover) {
-                this._showTooltip(icon, app.get_name());
-            } else {
-                this._hideTooltip();
-            }
         });
 
         // Badge
         let appId = app.get_id();
         let badge = this._createBadge();
-        icon.add_child(badge);
-        this._iconBadges.set(appId, { icon, badge });
-        this._updateBadge(icon, badge, appId);
+        wrapper.add_child(badge);
+        this._iconBadges.set(appId, { icon: wrapper, badge });
+        this._updateBadge(wrapper, badge, appId);
 
-        return icon;
+        return wrapper;
     }
 
     _activateApp(app) {
@@ -977,7 +1347,9 @@ class DockView extends St.Widget {
         let [x, y] = actor.get_transformed_position();
         let [w, h] = actor.get_transformed_size();
         
-        let tooltipX = Math.round(x + w + 10);
+        // Small offset for tooltip
+        const offset = 8;
+        let tooltipX = Math.round(x + w + offset);
         let tooltipY = Math.round(y + (h / 2) - (natH / 2));
 
         this._tooltip.set_position(tooltipX, tooltipY);
@@ -1017,34 +1389,55 @@ class DockView extends St.Widget {
     }
 
     handleDragOver(source, actor, x, y, time) {
-        if (source instanceof AppIcon) {
+        // Check for .app property (our custom wrapper) or AppIcon
+        if (source.app || source instanceof AppIcon) {
             return DND.DragMotionResult.MOVE_DROP;
         }
         return DND.DragMotionResult.NO_DROP;
     }
 
     acceptDrop(source, actor, x, y, time) {
-        if (source instanceof AppIcon) {
-            let app = source.app;
+        // Check for .app property (our custom wrapper) or AppIcon
+        if (source.app || source instanceof AppIcon) {
+            let app = source.app || source._app;
             if (!app) return false;
             
             let id = app.get_id();
-            
-            const columns = this._settings.get_int('columns');
-            const iconSize = this._settings.get_int('icon-size');
-            const itemPadding = 12; 
-            const totalIconSize = iconSize + itemPadding;
-            
-            let col = Math.floor(x / totalIconSize);
-            let row = Math.floor(y / totalIconSize);
-            
+            const columns = this._layoutMetrics?.columns ?? this._settings.get_int('columns');
+            const totalIconSize = this._layoutMetrics?.totalIconSize ?? this._settings.get_int('icon-size');
+            const cellSpacing = this._layoutMetrics?.cellSpacing ?? 6;
+            const cellSize = totalIconSize + cellSpacing;
+
+            // Transform stage coords into the legacy grid's local coords for accuracy
+            let localX = x;
+            let localY = y;
+            try {
+                const [stageX, stageY] = global.get_pointer();
+                const [ok, gridLocalX, gridLocalY] = this._grid.transform_stage_point(stageX, stageY);
+                if (ok) {
+                    localX = gridLocalX;
+                    localY = gridLocalY;
+                }
+            } catch (e) {
+                // fallback to given x,y
+            }
+
+            let col = Math.floor(localX / cellSize);
+            let row = Math.floor(localY / cellSize);
+
             if (col >= columns) col = columns - 1;
             if (col < 0) col = 0;
             if (row < 0) row = 0;
-            
+
             let index = row * columns + col;
-            
-            AppFavorites.getAppFavorites().moveFavoriteToPos(id, index);
+
+            // Clamp to favorites length to avoid misplacement at end
+            const favs = AppFavorites.getAppFavorites();
+            const maxLen = favs.getFavorites().length;
+            if (index > maxLen) index = maxLen;
+            if (index < 0) index = 0;
+
+            favs.moveFavoriteToPos(id, index);
             
             return true;
         }

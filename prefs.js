@@ -387,6 +387,31 @@ export default class TwoColumnDockPreferences extends ExtensionPreferences {
         settings.bind('show-on-all-monitors', monitorRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         monitorGroup.add(monitorRow);
 
+        // Display Scaling Group (for HiDPI/4K support)
+        const scalingGroup = new Adw.PreferencesGroup({
+            title: 'Display Scaling',
+            description: 'Configure scaling for HiDPI and 4K displays. Set to 0 for automatic detection.'
+        });
+        appearancePage.add(scalingGroup);
+
+        const scaleRow = new Adw.ActionRow({ 
+            title: 'Scale Factor',
+            subtitle: '0 = Auto, 1.0 = Normal, 1.5-2.0 = 4K displays'
+        });
+        const scaleSpin = Gtk.SpinButton.new_with_range(0.0, 3.0, 0.1);
+        scaleSpin.set_digits(1);
+        settings.bind('scale-factor', scaleSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        scaleRow.add_suffix(scaleSpin);
+        scalingGroup.add(scaleRow);
+
+        // Add info label about auto scaling
+        const scaleInfoRow = new Adw.ActionRow({ 
+            title: 'Auto Detection Info',
+            subtitle: 'When set to 0, the dock automatically scales based on your display resolution and GNOME\'s scaling settings.'
+        });
+        scaleInfoRow.set_activatable(false);
+        scalingGroup.add(scaleInfoRow);
+
         window.add(appearancePage);
 
         // Page 2: Groups
@@ -433,6 +458,12 @@ export default class TwoColumnDockPreferences extends ExtensionPreferences {
         settings.bind('group-spacing', spacingSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
         spacingRow.add_suffix(spacingSpin);
         groupSettingsGroup.add(spacingRow);
+
+        const groupRadiusRow = new Adw.ActionRow({ title: 'Group Corner Radius' });
+        const groupRadiusSpin = Gtk.SpinButton.new_with_range(0, 50, 1);
+        settings.bind('group-corner-radius', groupRadiusSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        groupRadiusRow.add_suffix(groupRadiusSpin);
+        groupSettingsGroup.add(groupRadiusRow);
 
         // Groups List
         const groupsListGroup = new Adw.PreferencesGroup({
@@ -518,6 +549,9 @@ export default class TwoColumnDockPreferences extends ExtensionPreferences {
         } catch (e) {
             groups = [];
         }
+
+        // Hide internal/system groups (used for ordering/metadata)
+        groups = groups.filter(g => !(g && g.hidden));
 
         if (groups.length === 0) {
             const emptyRow = new Adw.ActionRow({

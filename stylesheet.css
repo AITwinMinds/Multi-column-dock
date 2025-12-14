@@ -9,42 +9,74 @@
     padding: 4px 0;
 }
 
-/* Aggressively target the app icon button to remove backgrounds */
+/* Custom dock app button - simple and precise */
+.dock-app-button {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 8px;
+}
+
+.dock-app-button:hover,
+.dock-app-button:focus {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+}
+
+.dock-app-button:active {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Running indicator dot */
+.dock-running-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.85);
+    margin-bottom: 0;
+}
+
+/* Legacy AppIcon support (fallback) */
 .two-column-dock-container .app-well-app,
 .two-column-dock-container .app-well-app.running,
 .two-column-dock-container .app-well-app:selected,
-.two-column-dock-container .show-apps,
-.two-column-dock-container StButton {
+.two-column-dock-container .show-apps {
     background-color: transparent;
     background-image: none;
     background-gradient-direction: none;
     box-shadow: none;
     border: none;
-    margin: 0;
-    padding: 0;
+    margin: 0 !important;
+    padding: 0 !important;
     text-shadow: none;
     icon-shadow: none;
 }
 
-/* Restore hover effect */
+/* Ensure the internal icon box doesn't add offsets */
+.two-column-dock-container .overview-icon {
+    padding: 0 !important;
+    margin: 0 !important;
+    spacing: 0 !important;
+}
+
+/* Restore hover effect for legacy */
 .two-column-dock-container .app-well-app:hover,
-.two-column-dock-container .app-well-app:focus,
-.two-column-dock-container StButton:hover,
-.two-column-dock-container StButton:focus {
+.two-column-dock-container .app-well-app:focus {
     background-color: rgba(255, 255, 255, 0.15) !important;
     border-radius: 8px !important;
     transition-duration: 200ms;
 }
 
 /* Active/pressed state */
-.two-column-dock-container .app-well-app:active,
-.two-column-dock-container StButton:active {
+.two-column-dock-container .app-well-app:active {
     background-color: rgba(255, 255, 255, 0.25) !important;
 }
 
 .dock-show-apps {
-    padding: 0;
-    margin: 6px auto 0 auto;
+    padding: 0 !important;
+    margin: 6px auto 0 auto !important;
     border: none;
     box-shadow: none;
 }
@@ -73,7 +105,7 @@
     background-color: transparent;
 }
 
-/* Ensure icons are centered */
+/* Ensure icons are centered (kept for safety; !important above wins) */
 .two-column-dock-container .overview-icon {
     padding: 0;
 }
@@ -246,6 +278,9 @@
 
 /* =====================================================
    RESPONSIVE ADJUSTMENTS
+   Note: Most scaling is now handled dynamically in JavaScript
+   based on display resolution and scale factor.
+   These media queries provide fallback styling.
    ===================================================== */
 
 /* Smaller screens - more compact groups */
@@ -261,5 +296,22 @@
     
     .dock-group-collapse-icon {
         margin-right: 4px;
+    }
+}
+
+/* High DPI / 4K displays - ensure minimum touch target sizes */
+@media (min-resolution: 192dpi), (min-resolution: 2dppx) {
+    .two-column-dock-container .app-well-app:hover,
+    .two-column-dock-container .app-well-app:focus,
+    .two-column-dock-container StButton:hover,
+    .two-column-dock-container StButton:focus {
+        border-radius: 12px !important;
+    }
+}
+
+/* Very high resolution (5K+) */
+@media (min-resolution: 288dpi), (min-resolution: 3dppx) {
+    .dock-group-header {
+        min-height: 40px;
     }
 }
