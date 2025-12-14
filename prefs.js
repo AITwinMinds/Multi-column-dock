@@ -146,18 +146,98 @@ class GroupEditorDialog extends Adw.Dialog {
             vexpand: true,
         });
 
+        const appsBox = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 4,
+            margin_top: 4,
+            margin_bottom: 4,
+            margin_start: 4,
+            margin_end: 4,
+        });
+
+        // Search entry for filtering apps
+        this._searchEntry = new Gtk.SearchEntry({
+            placeholder_text: 'Search applications...',
+            hexpand: true,
+            margin_start: 4,
+            margin_end: 4,
+            margin_bottom: 4,
+        });
+        this._searchEntry.connect('search-changed', () => {
+            this._rebuildAppList();
+        });
+        appsBox.append(this._searchEntry);
+
         // App list with checkboxes
         this._appListBox = new Gtk.ListBox({
             selection_mode: Gtk.SelectionMode.NONE,
             css_classes: ['boxed-list'],
         });
 
-        // Sort apps alphabetically
-        const sortedApps = [...this._installedApps].sort((a, b) => 
+        // Store app info for rebuilding
+        this._sortedApps = [...this._installedApps].sort((a, b) => 
             a.name.localeCompare(b.name)
         );
 
-        for (let appInfo of sortedApps) {
+        // Build initial app list
+        this._rebuildAppList();
+
+        // Scrollable app list
+        const appScroll = new Gtk.ScrolledWindow({
+            vexpand: true,
+            hexpand: true,
+            hscrollbar_policy: Gtk.PolicyType.NEVER,
+            vscrollbar_policy: Gtk.PolicyType.AUTOMATIC,
+        });
+        appScroll.set_child(this._appListBox);
+        appsBox.append(appScroll);
+        
+        appsFrame.set_child(appsBox);
+        mainBox.append(appsFrame);
+
+        // Set up the dialog structure
+        const toolbarView = new Adw.ToolbarView();
+        toolbarView.add_top_bar(headerBar);
+        toolbarView.set_content(mainBox);
+
+        this.set_child(toolbarView);
+
+        this.set_child(toolbarView);
+    }
+
+    _rebuildAppList() {
+        // Clear existing rows
+        let child = this._appListBox.get_first_child();
+        while (child) {
+            let next = child.get_next_sibling();
+            this._appListBox.remove(child);
+            child = next;
+        }
+
+        // Get search query
+        const query = this._searchEntry.get_text().toLowerCase().trim();
+
+        // Filter apps by search query
+        let filteredApps = this._sortedApps;
+        if (query) {
+            filteredApps = this._sortedApps.filter(app => 
+                app.name.toLowerCase().includes(query) ||
+                app.id.toLowerCase().includes(query)
+            );
+        }
+
+        // Sort: selected apps first, then alphabetically
+        const sortedFiltered = [...filteredApps].sort((a, b) => {
+            const aSelected = this._selectedApps.has(a.id);
+            const bSelected = this._selectedApps.has(b.id);
+            
+            if (aSelected && !bSelected) return -1;
+            if (!aSelected && bSelected) return 1;
+            return a.name.localeCompare(b.name);
+        });
+
+        // Build app rows
+        for (let appInfo of sortedFiltered) {
             const row = new Gtk.Box({
                 orientation: Gtk.Orientation.HORIZONTAL,
                 spacing: 8,
@@ -177,6 +257,8 @@ class GroupEditorDialog extends Adw.Dialog {
                 } else {
                     this._selectedApps.delete(appInfo.id);
                 }
+                // Rebuild list to move selected items to top
+                this._rebuildAppList();
             });
             row.append(checkbox);
 
@@ -197,33 +279,18 @@ class GroupEditorDialog extends Adw.Dialog {
             });
             row.append(label);
 
+            // Add a visual indicator for selected apps
+            if (this._selectedApps.has(appInfo.id)) {
+                const selectedIcon = new Gtk.Image({
+                    icon_name: 'emblem-ok-symbolic',
+                    pixel_size: 16,
+                    css_classes: ['success'],
+                });
+                row.append(selectedIcon);
+            }
+
             this._appListBox.append(row);
         }
-
-        // Scrollable app list
-        const appScroll = new Gtk.ScrolledWindow({
-            vexpand: true,
-            hexpand: true,
-            hscrollbar_policy: Gtk.PolicyType.NEVER,
-            vscrollbar_policy: Gtk.PolicyType.AUTOMATIC,
-            margin_top: 4,
-            margin_bottom: 4,
-            margin_start: 4,
-            margin_end: 4,
-        });
-        appScroll.set_child(this._appListBox);
-        appsFrame.set_child(appScroll);
-        
-        mainBox.append(appsFrame);
-
-        // Set up the dialog structure
-        const toolbarView = new Adw.ToolbarView();
-        toolbarView.add_top_bar(headerBar);
-        toolbarView.set_content(mainBox);
-
-        this.set_child(toolbarView);
-
-        this.set_child(toolbarView);
     }
 
     _save() {
