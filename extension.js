@@ -1523,7 +1523,7 @@ class DockView extends St.Widget {
         wrapper.connect('button-press-event', (actor, event) => {
             const button = event.get_button();
             if (button === 3) {
-                this._showAppMenu(wrapper, app);
+                this._showAppMenu(wrapper, app, event.get_time());
                 return Clutter.EVENT_STOP;
             }
             if (button === 1) {
@@ -1590,17 +1590,26 @@ class DockView extends St.Widget {
         return wrapper;
     }
 
-    _showAppMenu(wrapper, app) {
+    _showAppMenu(wrapper, app, eventTime = 0) {
         if (!this._menuManager)
             return;
 
         // Lazily create and cache the menu per icon
         if (!wrapper._appMenu) {
-            const menu = new PopupMenu.PopupMenu(wrapper, 0.5, St.Side.TOP, 0);
+            // Dock is on the left: place menu to the right of the icon, with arrow on the left.
+            const menu = new PopupMenu.PopupMenu(wrapper, 0.5, St.Side.LEFT, 0);
             menu.box.add_style_class_name('dock-app-menu');
             Main.uiGroup.add_child(menu.actor);
             this._menuManager.addMenu(menu);
             wrapper._appMenu = menu;
+
+            // Keep the clicked icon visually highlighted while the menu is open.
+            menu.connect('open-state-changed', (_m, isOpen) => {
+                if (isOpen)
+                    wrapper.add_style_pseudo_class('hover');
+                else
+                    wrapper.remove_style_pseudo_class('hover');
+            });
 
             // Destroy with the icon to avoid leaks
             wrapper.connect('destroy', () => {
@@ -1632,6 +1641,52 @@ class DockView extends St.Widget {
                 this._appFavorites.addFavorite(appId);
         });
         wrapper._appMenu.addMenuItem(favoriteItem);
+
+        // App-specific desktop actions (e.g. Chrome "New Incognito Window")
+        // Prefer DesktopAppInfo because it supports list_actions()/launch_action() reliably.
+        const desktopInfo = Gio.DesktopAppInfo.new(appId);
+
+        let actions = [];
+        try {
+            if (desktopInfo && typeof desktopInfo.list_actions === 'function')
+                actions = desktopInfo.list_actions() || [];
+        } catch (e) {
+            actions = [];
+        }
+
+        if (actions.length > 0) {
+            wrapper._appMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+            for (const action of actions) {
+                let label = action;
+                try {
+                    if (desktopInfo && typeof desktopInfo.get_action_name === 'function')
+                        label = desktopInfo.get_action_name(action) || action;
+                } catch (e) {
+                    label = action;
+                }
+
+                const actionItem = new PopupMenu.PopupMenuItem(label);
+                actionItem.connect('activate', () => {
+                    const timestamp = eventTime || global.get_current_time();
+                    const workspaceIndex = global.workspace_manager?.get_active_workspace_index?.() ?? -1;
+                    const context = global.create_app_launch_context(timestamp, workspaceIndex);
+                    try {
+                        if (desktopInfo && typeof desktopInfo.launch_action === 'function') {
+                            desktopInfo.launch_action(action, context);
+                        } else if (typeof app.launch_action === 'function') {
+                            // Shell.App.launch_action() expects a timestamp (not a launch context)
+                            app.launch_action(action, timestamp);
+                        } else {
+                            app.open_new_window(-1);
+                        }
+                    } catch (e) {
+                        log(`[Multi-Column Dock] Failed to launch action '${action}' for ${appId}: ${e.message}`);
+                    }
+                });
+                wrapper._appMenu.addMenuItem(actionItem);
+            }
+        }
 
         wrapper._appMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
