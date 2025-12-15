@@ -346,6 +346,19 @@ export default class TwoColumnDockPreferences extends ExtensionPreferences {
         sizeRow.add_suffix(sizeSpin);
         dockGroup.add(sizeRow);
 
+        const paddingBaseRow = new Adw.ActionRow({ title: 'Icon Padding Min (px)' });
+        const paddingBaseSpin = Gtk.SpinButton.new_with_range(0, 64, 1);
+        settings.bind('icon-padding-base', paddingBaseSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        paddingBaseRow.add_suffix(paddingBaseSpin);
+        dockGroup.add(paddingBaseRow);
+
+        const paddingScaleRow = new Adw.ActionRow({ title: 'Icon Padding Scale' });
+        const paddingScaleSpin = Gtk.SpinButton.new_with_range(0.0, 1.0, 0.05);
+        paddingScaleSpin.set_digits(2);
+        settings.bind('icon-padding-scale', paddingScaleSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        paddingScaleRow.add_suffix(paddingScaleSpin);
+        dockGroup.add(paddingScaleRow);
+
         // Visual Style Group
         const styleGroup = new Adw.PreferencesGroup({
             title: 'Visual Style',

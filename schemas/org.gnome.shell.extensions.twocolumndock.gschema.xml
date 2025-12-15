@@ -11,6 +11,16 @@
       <summary>Icon size</summary>
       <description>The size of the application icons in pixels.</description>
     </key>
+    <key name="icon-padding-base" type="i">
+      <default>15</default>
+      <summary>Icon Padding Base</summary>
+      <description>Minimum padding (pixels) applied around each icon.</description>
+    </key>
+    <key name="icon-padding-scale" type="d">
+      <default>0.18</default>
+      <summary>Icon Padding Scale</summary>
+      <description>Multiplier of icon size used to compute padding.</description>
+    </key>
     <key name="background-color" type="s">
       <default>'#1e1e1e'</default>
       <summary>Background Color</summary>

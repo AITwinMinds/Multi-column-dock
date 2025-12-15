@@ -900,7 +900,9 @@ class DockView extends St.Widget {
 
         // Add padding around icons for breathing room
         // The padding is part of the clickable/hover area
-        const iconPadding = Math.max(15, Math.round(iconSize * 0.30));
+        const paddingBase = this._settings.get_int('icon-padding-base');
+        const paddingScale = this._settings.get_double('icon-padding-scale');
+        const iconPadding = Math.max(paddingBase, Math.round(iconSize * paddingScale));
         const totalIconSize = iconSize + iconPadding;
         
         // Additional spacing between cells in the grid
