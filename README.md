@@ -1,26 +1,58 @@
 # Multi-Column Dock
 
-A sleek, customizable multi-column dock extension for GNOME Shell that brings a modern and efficient app launcher experience to your desktop.
+A powerful, customizable multi-column dock extension for GNOME Shell that brings a modern and efficient app launcher experience to your desktop with app grouping, auto-hide, and extensive customization options.
 
 ![GNOME Shell](https://img.shields.io/badge/GNOME_Shell-45%2B-blue?style=flat-square&logo=gnome)
 ![License](https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square)
 
 ## ✨ Features
 
-- **Multi-Column Layout** – Organize your favorite apps in a configurable grid with 1-4 columns
+### Core Features
+- **Multi-Column Layout** – Organize your favorite apps in a configurable grid with 1-5 columns
+- **Dock Position** – Place the dock on the left or right side of your screen
 - **Smooth Scrolling** – Seamlessly scroll through all your apps when you have many pinned
-- **Customizable Appearance** – Adjust background color, opacity, corner radius, and icon size
-- **Running App Indicators** – Easily see which applications are currently running
+- **Running App Indicators** – Visual dots showing which applications are currently running
 - **Drag & Drop Support** – Reorder your favorite apps with intuitive drag and drop
 - **Multi-Monitor Support** – Option to display the dock on all connected monitors
+- **Notification Badges** – See app notification counts (Unity API compatible)
+
+### App Grouping
+- **Custom Groups** – Organize apps into named, color-coded groups
+- **Collapsible Groups** – Click group headers to collapse/expand
+- **Per-Group Styling** – Customize each group's background color, border, and opacity
+- **Ungrouped Apps Section** – Apps not in groups appear in a separate "Other" section
+- **Drag & Drop Between Groups** – Move apps between groups easily
+
+### Auto-Hide
+- **Smart Auto-Hide** – Dock hides automatically when not in use
+- **Hot Zone Activation** – Move mouse to screen edge to reveal the dock
+- **Configurable Delays** – Set custom show/hide delay timings
+- **Adjustable Hot Zone Size** – Control the trigger area size
+
+### Customization
+- **Icon Size** – Adjust icon size from 16px to 128px
+- **Icon Padding** – Fine-tune spacing around icons
+- **Background Color & Opacity** – Full control over dock appearance
+- **Corner Radius** – Customize dock and group corner roundness
+- **Group Header Size** – Adjust the height of group labels
+- **Group Spacing** – Control spacing between groups
+- **HiDPI Support** – Manual scale factor override for high-resolution displays
+
+### Additional Features
 - **Integrated Show Apps Button** – Quick access to the GNOME app grid
 - **Tooltips** – Hover over icons to see app names
+- **Right-Click Menus** – Access app actions, pin/unpin, and quit options
+- **Favorites Integration** – Syncs with GNOME favorites
 
-<img width="1068" height="1080" alt="Screenshot from 2025-12-13 16-11-57" src="https://github.com/user-attachments/assets/8ce7dc99-a030-4070-afd8-90b80b30b0a3" />
-<img width="1086" height="1078" alt="Screenshot from 2025-12-13 16-13-12" src="https://github.com/user-attachments/assets/033e3703-c121-401d-9c59-224b2042cce5" />
+## 📸 Screenshots
 
+<img width="1068" height="1080" alt="Dock with groups" src="https://github.com/user-attachments/assets/8ce7dc99-a030-4070-afd8-90b80b30b0a3" />
+<img width="1086" height="1078" alt="Dock customization" src="https://github.com/user-attachments/assets/033e3703-c121-401d-9c59-224b2042cce5" />
 
 ## 📦 Installation
+
+### From GNOME Extensions Website
+Visit [GNOME Extensions](https://extensions.gnome.org/) and search for "Multi-Column Dock".
 
 ### From Source
 
@@ -61,14 +93,43 @@ A sleek, customizable multi-column dock extension for GNOME Shell that brings a 
 
 ## ⚙️ Configuration
 
-Open the extension preferences to customize:
-<img width="762" height="741" alt="Screenshot from 2025-12-13 16-13-55" src="https://github.com/user-attachments/assets/59b49c92-d46b-48de-99b3-8133b6f0d689" />
-- **Columns**: Set the number of columns (1-4)
-- **Icon Size**: Adjust the size of app icons
-- **Background Color**: Choose your preferred dock background color
-- **Background Opacity**: Set the transparency level
-- **Corner Radius**: Customize the dock's corner roundness
-- **Multi-Monitor**: Enable/disable dock on all monitors
+Open the extension preferences to customize all settings:
+
+<img width="762" height="741" alt="Preferences window" src="https://github.com/user-attachments/assets/59b49c92-d46b-48de-99b3-8133b6f0d689" />
+
+### Appearance Settings
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Dock Position | Left or Right side of screen | Left |
+| Columns | Number of icon columns (1-5) | 2 |
+| Icon Size | Size of app icons in pixels | 48px |
+| Icon Padding | Spacing around icons | 15px base |
+| Background Color | Dock background color | #1e1e1e |
+| Background Opacity | Transparency level (0-1) | 0.95 |
+| Corner Radius | Dock corner roundness | 0 |
+
+### Auto-Hide Settings
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Auto-Hide | Enable automatic hiding | Off |
+| Hide Delay | Ms before dock hides | 300ms |
+| Show Delay | Ms before dock appears | 100ms |
+| Hot Zone Size | Trigger area in pixels | 5px |
+
+### Group Settings
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Enable Groups | Turn on app grouping | Off |
+| Group Header Size | Height of group labels | 24px |
+| Group Spacing | Space between groups | 8px |
+| Group Corner Radius | Group border roundness | 6 |
+| Show Ungrouped | Show "Other" section | On |
+
+### Display Settings
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Multi-Monitor | Show dock on all monitors | Off |
+| Scale Factor | HiDPI override (0=auto) | Auto |
 
 Access preferences via:
 ```bash
@@ -77,9 +138,20 @@ gnome-extensions prefs AITwinMinds@gmail.com
 
 Or through the GNOME Extensions app.
 
+## 🎨 Creating App Groups
+
+1. Open extension preferences
+2. Go to the "Groups" tab
+3. Click "Add Group" to create a new group
+4. Set the group name, colors, and appearance
+5. Select which apps belong to this group
+6. Enable "Enable Groups" in the Appearance tab
+
+Groups can be reordered, collapsed, and styled individually!
+
 ## 🖥️ Requirements
 
-- GNOME Shell 45 or later
+- GNOME Shell 45, 46, or 47
 - GLib 2.0
 
 ## 🗑️ Uninstallation
@@ -89,26 +161,36 @@ gnome-extensions disable AITwinMinds@gmail.com
 rm -rf ~/.local/share/gnome-shell/extensions/AITwinMinds@gmail.com
 ```
 
+## 🐛 Troubleshooting
+
+### Dock not appearing
+- Ensure the extension is enabled: `gnome-extensions info AITwinMinds@gmail.com`
+- Check for errors: `journalctl -f -o cat /usr/bin/gnome-shell`
+
+### Icons too small/large on HiDPI
+- Adjust the Scale Factor in preferences (try values between 1.0-2.0)
+
+### Auto-hide not working
+- Increase the Hot Zone Size in preferences
+- Ensure no other extensions are blocking the screen edge
+
 ## 📄 License
 
 This project is licensed under the GPL-3.0 License - see the [LICENSE](LICENSE) file for details.
 
-## Support Us
+## 🤝 Contributing
 
-If you find it helpful, consider supporting us in the following ways:
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-- ⭐ Star this repository on [GitHub](https://github.com/AITwinMinds/Multi-column-dock).
-  
-- 🐦 Follow us on X (Twitter): [@AITwinMinds](https://twitter.com/AITwinMinds)
+## 💬 Support
 
-- 📣 Join our Telegram Channel: [AITwinMinds](https://t.me/AITwinMinds) for discussions and announcements.
+- ⭐ Star this repository on [GitHub](https://github.com/AITwinMinds/Multi-column-dock)
+- 🐛 Report issues on the [Issues page](https://github.com/AITwinMinds/Multi-column-dock/issues)
+- 📧 Contact: [AITwinMinds@gmail.com](mailto:AITwinMinds@gmail.com)
 
-- 🎥 Subscribe to our YouTube Channel: [AITwinMinds](https://www.youtube.com/@AITwinMinds) for video tutorials and updates.
+## 🔗 Links
 
-- 📸 Follow us on Instagram: [@AITwinMinds](https://www.instagram.com/AITwinMinds)
-
-Don't forget to share it with your friends!
-
-## Contact
-
-For any inquiries, please contact us at [AITwinMinds@gmail.com](mailto:AITwinMinds@gmail.com).
+- [GitHub Repository](https://github.com/AITwinMinds/Multi-column-dock)
+- [Twitter/X: @AITwinMinds](https://twitter.com/AITwinMinds)
+- [YouTube: AITwinMinds](https://www.youtube.com/@AITwinMinds)
+- [Telegram: AITwinMinds](https://t.me/AITwinMinds)

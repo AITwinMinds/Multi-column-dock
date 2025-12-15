@@ -4,7 +4,6 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Shell from 'gi://Shell';
-import Meta from 'gi://Meta';
 import Pango from 'gi://Pango';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as AppFavorites from 'resource:///org/gnome/shell/ui/appFavorites.js';
@@ -647,8 +646,6 @@ class DockView extends St.Widget {
         this._favoritesChangedId = this._appFavorites.connect('changed', this._redisplay.bind(this));
         this._appStateChangedId = this._appSystem.connect('app-state-changed', this._redisplay.bind(this));
         this._installedChangedId = this._appSystem.connect('installed-changed', this._redisplay.bind(this));
-        
-        this.connect('destroy', this._onDestroy.bind(this));
 
         this._updateStyle();
         this._redisplay();
@@ -685,16 +682,6 @@ class DockView extends St.Widget {
             this._loadGroups();
         }
         
-        // Trigger redisplay for scale-factor changes or other display settings
-        if (key === 'scale-factor' || key === 'icon-size' || key === 'columns' || 
-            key === 'group-header-size' || key === 'group-spacing') {
-            // Log scale factor change for debugging
-            if (key === 'scale-factor') {
-                const newScale = this._settings.get_double('scale-factor');
-                log(`[Multi-Column Dock] Scale factor changed to: ${newScale === 0 ? 'Auto' : newScale}`);
-            }
-        }
-
         // Handle auto-hide settings changes
         if (key === 'auto-hide' || key === 'hot-zone-size') {
             this._updateAutoHide();
@@ -1092,7 +1079,7 @@ class DockView extends St.Widget {
         `);
     }
 
-    _onDestroy() {
+    destroy() {
         // Clean up auto-hide resources
         this._clearAutoHideTimeouts();
         this._destroyHotZone();
@@ -1131,6 +1118,8 @@ class DockView extends St.Widget {
             this._showAppsButton.disconnect(this._showAppsClickedId);
             this._showAppsClickedId = 0;
         }
+        
+        super.destroy();
     }
 
     _onBadgeUpdate(appId) {
@@ -1264,7 +1253,7 @@ class DockView extends St.Widget {
             this._showAppsButton.set_size(totalIconSize, totalIconSize);
             this._showAppsButton.set_style(`border: none; box-shadow: none; padding: 2px; margin: 4px auto 6px auto;`);
         }
-        if (this._showAppsIcon && typeof this._showAppsIcon.set_icon_size === 'function') {
+        if (this._showAppsIcon) {
             this._showAppsIcon.set_icon_size(iconSize);
         }
 
@@ -1379,15 +1368,8 @@ class DockView extends St.Widget {
                 if (!groupContainer.isCollapsed()) {
                     let grid = groupContainer.getGrid();
                     let layout = grid.layout_manager;
-                    // Provide spacing via the grid, not via oversized AppIcon actors.
-                    if (typeof layout.set_column_spacing === 'function')
-                        layout.set_column_spacing(cellSpacing);
-                    else
-                        layout.column_spacing = cellSpacing;
-                    if (typeof layout.set_row_spacing === 'function')
-                        layout.set_row_spacing(cellSpacing);
-                    else
-                        layout.row_spacing = cellSpacing;
+                    layout.set_column_spacing(cellSpacing);
+                    layout.set_row_spacing(cellSpacing);
                     layout.set_column_homogeneous(true);
                     layout.set_row_homogeneous(true);
 
@@ -1447,14 +1429,8 @@ class DockView extends St.Widget {
 
                 let grid = groupContainer.getGrid();
                 let layout = grid.layout_manager;
-                if (typeof layout.set_column_spacing === 'function')
-                    layout.set_column_spacing(cellSpacing);
-                else
-                    layout.column_spacing = cellSpacing;
-                if (typeof layout.set_row_spacing === 'function')
-                    layout.set_row_spacing(cellSpacing);
-                else
-                    layout.row_spacing = cellSpacing;
+                layout.set_column_spacing(cellSpacing);
+                layout.set_row_spacing(cellSpacing);
                 layout.set_column_homogeneous(true);
                 layout.set_row_homogeneous(true);
 
@@ -1715,7 +1691,7 @@ class DockView extends St.Widget {
 
         let actions = [];
         try {
-            if (desktopInfo && typeof desktopInfo.list_actions === 'function')
+            if (desktopInfo)
                 actions = desktopInfo.list_actions() || [];
         } catch (e) {
             actions = [];
@@ -1727,7 +1703,7 @@ class DockView extends St.Widget {
             for (const action of actions) {
                 let label = action;
                 try {
-                    if (desktopInfo && typeof desktopInfo.get_action_name === 'function')
+                    if (desktopInfo)
                         label = desktopInfo.get_action_name(action) || action;
                 } catch (e) {
                     label = action;
@@ -1739,11 +1715,8 @@ class DockView extends St.Widget {
                     const workspaceIndex = global.workspace_manager?.get_active_workspace_index?.() ?? -1;
                     const context = global.create_app_launch_context(timestamp, workspaceIndex);
                     try {
-                        if (desktopInfo && typeof desktopInfo.launch_action === 'function') {
+                        if (desktopInfo) {
                             desktopInfo.launch_action(action, context);
-                        } else if (typeof app.launch_action === 'function') {
-                            // Shell.App.launch_action() expects a timestamp (not a launch context)
-                            app.launch_action(action, timestamp);
                         } else {
                             app.open_new_window(-1);
                         }

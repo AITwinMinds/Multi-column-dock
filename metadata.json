@@ -1,6 +1,6 @@
 {
   "name": "Multi-Column Dock",
-  "description": "A sleek, customizable multi-column dock extension for GNOME Shell with smooth scrolling, drag & drop reordering, and multi-monitor support.\n\n✨ Features:\n• Multi-column layout\n• Smooth scrolling\n• Customizable appearance\n• Drag & drop reordering\n• Multi-monitor support\n\n👤 Author: AITwinMinds\n📧 Email: AITwinMinds@gmail.com\n🌐 GitHub: github.com/AITwinMinds\n🐦 Twitter: @AITwinMinds\n🎥 YouTube: youtube.com/@AITwinMinds\n📣 Telegram: t.me/AITwinMinds\n📸 Instagram: @AITwinMinds",
+  "description": "A customizable multi-column dock for GNOME Shell with app grouping, smooth scrolling, drag & drop reordering, auto-hide, and multi-monitor support.",
   "uuid": "AITwinMinds@gmail.com",
   "shell-version": [
     "45",
