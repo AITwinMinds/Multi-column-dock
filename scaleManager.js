@@ -27,17 +27,8 @@ export class ScaleManager {
 
         // Use GNOME Shell's built-in scale factor - this already handles HiDPI properly
         // No need to calculate our own - GNOME does this correctly
-        let themeScale = 1.0;
-        try {
-            const themeContext = St.ThemeContext.get_for_stage(global.stage);
-            if (themeContext) {
-                themeScale = themeContext.scale_factor;
-            }
-        } catch (e) {
-            log(`[Multi-Column Dock] Error getting theme scale: ${e.message}`);
-        }
-
-        return themeScale;
+        const themeContext = St.ThemeContext.get_for_stage(global.stage);
+        return themeContext?.scale_factor ?? 1.0;
     }
 
     /**

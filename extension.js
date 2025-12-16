@@ -29,10 +29,11 @@ export default class MultiColumnDockExtension extends Extension {
         this._createDocks();
         
         this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', this._createDocks.bind(this));
-        this._settings.connect('changed::show-on-all-monitors', this._createDocks.bind(this));
-        // Recreate docks when auto-hide or position changes to update struts
-        this._settings.connect('changed::auto-hide', this._createDocks.bind(this));
-        this._settings.connect('changed::dock-position', this._createDocks.bind(this));
+        this._settingsChangedIds = [
+            this._settings.connect('changed::show-on-all-monitors', this._createDocks.bind(this)),
+            this._settings.connect('changed::auto-hide', this._createDocks.bind(this)),
+            this._settings.connect('changed::dock-position', this._createDocks.bind(this)),
+        ];
 
         // Hide original dash
         this._originalDash = Main.overview.dash;
@@ -121,7 +122,12 @@ export default class MultiColumnDockExtension extends Extension {
         
         // For right position, we need to reposition after the dock calculates its size
         if (dockPosition === 'right') {
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            // Clear any existing timeout before creating new one
+            if (dock._positionTimeoutId) {
+                GLib.source_remove(dock._positionTimeoutId);
+            }
+            dock._positionTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+                dock._positionTimeoutId = 0;
                 dock.set_x(monitor.x + monitor.width - dock.get_width());
                 dock._storeVisiblePosition();
                 return GLib.SOURCE_REMOVE;
@@ -137,6 +143,12 @@ export default class MultiColumnDockExtension extends Extension {
 
         if (this._monitorsChangedId) {
             Main.layoutManager.disconnect(this._monitorsChangedId);
+            this._monitorsChangedId = 0;
+        }
+        
+        if (this._settingsChangedIds) {
+            this._settingsChangedIds.forEach(id => this._settings.disconnect(id));
+            this._settingsChangedIds = null;
         }
 
         if (this._docks) {

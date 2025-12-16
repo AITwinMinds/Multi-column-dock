@@ -211,7 +211,8 @@ class DockView extends St.Widget {
         this._redisplay();
         
         // Initialize auto-hide after a short delay to ensure dock dimensions are calculated
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+        this._initTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+            this._initTimeoutId = 0;
             this._storeVisiblePosition();
             this._updateAutoHide();
             return GLib.SOURCE_REMOVE;
@@ -425,18 +426,7 @@ class DockView extends St.Widget {
     }
 
     _hasActiveMenu() {
-        // Check if any popup menu is open
-        if (this._menuManager) {
-            try {
-                // Check if activeMenu exists and is open
-                if (this._menuManager._activeMenu && this._menuManager._activeMenu.isOpen) {
-                    return true;
-                }
-            } catch (e) {
-                // Fallback - no active menu
-            }
-        }
-        return false;
+        return this._menuManager?._activeMenu?.isOpen ? true : false;
     }
 
     _isMouseOverDock() {
@@ -640,6 +630,16 @@ class DockView extends St.Widget {
     }
 
     destroy() {
+        // Clean up timeouts
+        if (this._initTimeoutId) {
+            GLib.source_remove(this._initTimeoutId);
+            this._initTimeoutId = 0;
+        }
+        if (this._positionTimeoutId) {
+            GLib.source_remove(this._positionTimeoutId);
+            this._positionTimeoutId = 0;
+        }
+        
         // Clean up auto-hide resources
         this._clearAutoHideTimeouts();
         this._destroyHotZone();
@@ -1114,7 +1114,11 @@ class DockView extends St.Widget {
             dragStarted = true;
         });
         wrapper._draggable.connect('drag-end', () => {
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+            if (wrapper._dragEndTimeoutId) {
+                GLib.source_remove(wrapper._dragEndTimeoutId);
+            }
+            wrapper._dragEndTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                wrapper._dragEndTimeoutId = 0;
                 dragStarted = false;
                 return GLib.SOURCE_REMOVE;
             });
@@ -1165,7 +1169,11 @@ class DockView extends St.Widget {
                 }
             });
             
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            if (wrapper._activateTimeoutId) {
+                GLib.source_remove(wrapper._activateTimeoutId);
+            }
+            wrapper._activateTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+                wrapper._activateTimeoutId = 0;
                 this._activateApp(app);
                 return GLib.SOURCE_REMOVE;
             });
