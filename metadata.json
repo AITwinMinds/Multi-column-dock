@@ -1,6 +1,6 @@
 {
   "name": "Multi-Column Dock",
-  "description": "A customizable multi-column dock for GNOME Shell with app grouping, smooth scrolling, drag & drop reordering, auto-hide, and multi-monitor support.",
+  "description": "A customizable multi-column dock for GNOME Shell with app grouping, smooth scrolling, drag & drop reordering, auto-hide, and multi-monitor support. We'd be happy to have your comments here or on GitHub! Report issues on GitHub, star our repo if you like it, and support development via the donate button here or on our GitHub page.",
   "uuid": "AITwinMinds@gmail.com",
   "shell-version": [
     "45",
