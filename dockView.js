@@ -616,19 +616,25 @@ export const DockView = GObject.registerClass(
 
         _moveAppToGroup(appId, groupId, position = -1) {
             const UNGROUPED_ORDER_ID = '__ungrouped_order__';
+            const OTHER_GROUP_ID = '__other__';
             this._ensureUngroupedOrderGroup();
 
             const orderGroup = this._groups.find(g => g && g.id === UNGROUPED_ORDER_ID);
 
-            // Remove app from all groups first
+            // Remove app from all groups first (except hidden order group)
             for (let group of this._groups) {
-                if (group.apps) {
+                if (group.apps && group.id !== UNGROUPED_ORDER_ID) {
                     group.apps = group.apps.filter(id => id !== appId);
                 }
             }
+            // Also remove from order group to avoid duplicates when re-adding
+            if (orderGroup && orderGroup.apps) {
+                orderGroup.apps = orderGroup.apps.filter(id => id !== appId);
+            }
 
             // If dropping into the special "Other" section, store order in the hidden order group.
-            if (groupId === 'ungrouped') {
+            // Check for both 'ungrouped' (legacy container ID) and '__other__' (new group ID)
+            if (groupId === 'ungrouped' || groupId === OTHER_GROUP_ID) {
                 if (orderGroup) {
                     const list = orderGroup.apps;
                     // Insert at specific position or append
