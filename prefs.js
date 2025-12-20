@@ -63,6 +63,8 @@ const GroupEditorDialog = GObject.registerClass(
             this._installedApps = installedApps;
             this._onSave = onSave;
             this._selectedApps = new Set(this._group.apps || []);
+            // Detect if this is the "Other" group (apps are auto-assigned)
+            this._isOtherGroup = this._group.id === '__other__' || this._group.isOtherGroup;
 
             this._buildUI();
         }
@@ -140,59 +142,74 @@ const GroupEditorDialog = GObject.registerClass(
             mainBox.append(settingsFrame);
 
             // ===== Applications Section (takes remaining space) =====
-            const appsFrame = new Gtk.Frame({
-                label: 'Applications - Select apps for this group',
-                vexpand: true,
-            });
+            // Hide for "Other" group since apps are auto-assigned
+            if (!this._isOtherGroup) {
+                const appsFrame = new Gtk.Frame({
+                    label: 'Applications - Select apps for this group',
+                    vexpand: true,
+                });
 
-            const appsBox = new Gtk.Box({
-                orientation: Gtk.Orientation.VERTICAL,
-                spacing: 4,
-                margin_top: 4,
-                margin_bottom: 4,
-                margin_start: 4,
-                margin_end: 4,
-            });
+                const appsBox = new Gtk.Box({
+                    orientation: Gtk.Orientation.VERTICAL,
+                    spacing: 4,
+                    margin_top: 4,
+                    margin_bottom: 4,
+                    margin_start: 4,
+                    margin_end: 4,
+                });
 
-            // Search entry for filtering apps
-            this._searchEntry = new Gtk.SearchEntry({
-                placeholder_text: 'Search applications...',
-                hexpand: true,
-                margin_start: 4,
-                margin_end: 4,
-                margin_bottom: 4,
-            });
-            this._searchEntry.connect('search-changed', () => {
+                // Search entry for filtering apps
+                this._searchEntry = new Gtk.SearchEntry({
+                    placeholder_text: 'Search applications...',
+                    hexpand: true,
+                    margin_start: 4,
+                    margin_end: 4,
+                    margin_bottom: 4,
+                });
+                this._searchEntry.connect('search-changed', () => {
+                    this._rebuildAppList();
+                });
+                appsBox.append(this._searchEntry);
+
+                // App list with checkboxes
+                this._appListBox = new Gtk.ListBox({
+                    selection_mode: Gtk.SelectionMode.NONE,
+                    css_classes: ['boxed-list'],
+                });
+
+                // Store app info for rebuilding
+                this._sortedApps = [...this._installedApps].sort((a, b) =>
+                    a.name.localeCompare(b.name)
+                );
+
+                // Build initial app list
                 this._rebuildAppList();
-            });
-            appsBox.append(this._searchEntry);
 
-            // App list with checkboxes
-            this._appListBox = new Gtk.ListBox({
-                selection_mode: Gtk.SelectionMode.NONE,
-                css_classes: ['boxed-list'],
-            });
+                // Scrollable app list
+                const appScroll = new Gtk.ScrolledWindow({
+                    vexpand: true,
+                    hexpand: true,
+                    hscrollbar_policy: Gtk.PolicyType.NEVER,
+                    vscrollbar_policy: Gtk.PolicyType.AUTOMATIC,
+                });
+                appScroll.set_child(this._appListBox);
+                appsBox.append(appScroll);
 
-            // Store app info for rebuilding
-            this._sortedApps = [...this._installedApps].sort((a, b) =>
-                a.name.localeCompare(b.name)
-            );
-
-            // Build initial app list
-            this._rebuildAppList();
-
-            // Scrollable app list
-            const appScroll = new Gtk.ScrolledWindow({
-                vexpand: true,
-                hexpand: true,
-                hscrollbar_policy: Gtk.PolicyType.NEVER,
-                vscrollbar_policy: Gtk.PolicyType.AUTOMATIC,
-            });
-            appScroll.set_child(this._appListBox);
-            appsBox.append(appScroll);
-
-            appsFrame.set_child(appsBox);
-            mainBox.append(appsFrame);
+                appsFrame.set_child(appsBox);
+                mainBox.append(appsFrame);
+            } else {
+                // Show info message for Other group
+                const infoLabel = new Gtk.Label({
+                    label: 'Applications are automatically assigned to this group.\nAny app not in another group will appear here.',
+                    wrap: true,
+                    margin_top: 12,
+                    margin_bottom: 12,
+                    css_classes: ['dim-label'],
+                });
+                mainBox.append(infoLabel);
+                // Reduce dialog height since no app list
+                this.content_height = 300;
+            }
 
             // Set up the dialog structure
             const toolbarView = new Adw.ToolbarView();
@@ -640,9 +657,11 @@ export default class MultiColumnDockPreferences extends ExtensionPreferences {
 
         for (let i = 0; i < groups.length; i++) {
             const group = groups[i];
+            const isOtherGroup = group.id === '__other__' || group.isOtherGroup;
+
             const row = new Adw.ActionRow({
                 title: group.name || 'Unnamed Group',
-                subtitle: `${(group.apps || []).length} apps`,
+                subtitle: isOtherGroup ? '(ungrouped apps - auto-assigned)' : `${(group.apps || []).length} apps`,
             });
 
             // Color indicator
@@ -703,12 +722,13 @@ export default class MultiColumnDockPreferences extends ExtensionPreferences {
             });
             row.add_suffix(downBtn);
 
-            // Delete button
+            // Delete button - disabled for Other group
             const deleteBtn = new Gtk.Button({
                 icon_name: 'user-trash-symbolic',
                 valign: Gtk.Align.CENTER,
                 css_classes: ['flat', 'destructive-action'],
-                tooltip_text: 'Delete group',
+                tooltip_text: isOtherGroup ? 'Cannot delete Other group' : 'Delete group',
+                sensitive: !isOtherGroup,
             });
             deleteBtn.connect('clicked', () => {
                 this._deleteGroup(settings, group.id, listBox, window, installedApps);
@@ -754,14 +774,24 @@ export default class MultiColumnDockPreferences extends ExtensionPreferences {
             return;
         }
 
-        // Find the actual index of the group by ID (works with filtered lists)
+        // Find the actual index of the group by ID
         const index = groups.findIndex(g => g.id === groupId);
         if (index < 0) return;
 
-        const newIndex = index + direction;
+        // Find the next visible group in the specified direction (skip hidden groups)
+        let newIndex = index + direction;
+        while (newIndex >= 0 && newIndex < groups.length) {
+            const targetGroup = groups[newIndex];
+            // Skip hidden groups (like __ungrouped_order__)
+            if (targetGroup && !targetGroup.hidden) {
+                break;
+            }
+            newIndex += direction;
+        }
+
         if (newIndex < 0 || newIndex >= groups.length) return;
 
-        // Swap
+        // Swap the groups
         [groups[index], groups[newIndex]] = [groups[newIndex], groups[index]];
         settings.set_string('app-groups', JSON.stringify(groups));
         this._populateGroupsList(listBox, settings, window, installedApps);
