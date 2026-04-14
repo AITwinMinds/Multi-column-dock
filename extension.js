@@ -33,6 +33,10 @@ export default class MultiColumnDockExtension extends Extension {
             this._settings.connect('changed::show-on-all-monitors', this._createDocks.bind(this)),
             this._settings.connect('changed::auto-hide', this._createDocks.bind(this)),
             this._settings.connect('changed::dock-position', this._createDocks.bind(this)),
+            this._settings.connect('changed::shrink-to-content', this._createDocks.bind(this)),
+            this._settings.connect('changed::center-dock', this._createDocks.bind(this)),
+            this._settings.connect('changed::show-apps-at-top', this._createDocks.bind(this)),
+            this._settings.connect('changed::dock-padding', this._createDocks.bind(this)),
         ];
 
         // Hide original dash
@@ -67,10 +71,14 @@ export default class MultiColumnDockExtension extends Extension {
     _createDocks() {
         if (this._docks) {
             this._docks.forEach(dock => {
-                // Clean up position timeout before destroying
+                // Clean up timeouts before destroying
                 if (dock._positionTimeoutId) {
                     GLib.source_remove(dock._positionTimeoutId);
                     dock._positionTimeoutId = 0;
+                }
+                if (dock._heightNotifyId) {
+                    dock.disconnect(dock._heightNotifyId);
+                    dock._heightNotifyId = 0;
                 }
                 Main.layoutManager.removeChrome(dock);
                 dock.destroy();
@@ -104,38 +112,46 @@ export default class MultiColumnDockExtension extends Extension {
         const dockPosition = this._settings.get_string('dock-position');
         const isPrimary = monitor.index === Main.layoutManager.primaryIndex;
         const panelHeight = isPrimary ? Main.panel.height : 0;
-        
-        let x, y, height;
-        
-        // Height is the same for both left and right positions
-        height = monitor.height - panelHeight;
+        const shrinkToContent = this._settings.get_boolean('shrink-to-content');
+        const centerDock = this._settings.get_boolean('center-dock');
+
+        let x, y;
+        const availableHeight = monitor.height - panelHeight;
+
+        if (shrinkToContent) {
+            dock.set_height(-1); // natural height
+            dock.set_style(dock.get_style() + `; max-height: ${availableHeight}px;`);
+        } else {
+            dock.set_height(availableHeight);
+        }
+
         y = monitor.y + panelHeight;
-        
+
         if (dockPosition === 'right') {
-            // X position needs to account for dock width (set after width is known)
             x = monitor.x + monitor.width - dock.get_width();
         } else {
-            // Default to left
             x = monitor.x;
         }
-        
+
         dock.set_position(x, y);
-        dock.set_height(height);
-        
-        // Store visible position for auto-hide after positioning
         dock._storeVisiblePosition();
-        
-        // For right position, we need to reposition after the dock calculates its size
-        if (dockPosition === 'right') {
-            // Clear any existing timeout before creating new one
-            if (dock._positionTimeoutId) {
-                GLib.source_remove(dock._positionTimeoutId);
-            }
-            dock._positionTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
-                dock._positionTimeoutId = 0;
-                dock.set_x(monitor.x + monitor.width - dock.get_width());
+
+        // Re-center whenever dock height changes (only when shrink + center enabled)
+        if (dock._heightNotifyId) {
+            dock.disconnect(dock._heightNotifyId);
+            dock._heightNotifyId = 0;
+        }
+        if (shrinkToContent && centerDock) {
+            dock._heightNotifyId = dock.connect('notify::height', () => {
+                if (dock._isHidden) return;
+                const h = dock.get_height();
+                const newY = monitor.y + panelHeight + Math.max(0, Math.floor((availableHeight - h) / 2));
+                dock.set_y(newY);
+
+                if (dockPosition === 'right') {
+                    dock.set_x(monitor.x + monitor.width - dock.get_width());
+                }
                 dock._storeVisiblePosition();
-                return GLib.SOURCE_REMOVE;
             });
         }
     }
@@ -158,10 +174,13 @@ export default class MultiColumnDockExtension extends Extension {
 
         if (this._docks) {
             this._docks.forEach(dock => {
-                // Clean up position timeout before destroying
                 if (dock._positionTimeoutId) {
                     GLib.source_remove(dock._positionTimeoutId);
                     dock._positionTimeoutId = 0;
+                }
+                if (dock._heightNotifyId) {
+                    dock.disconnect(dock._heightNotifyId);
+                    dock._heightNotifyId = 0;
                 }
                 Main.layoutManager.removeChrome(dock);
                 dock.destroy();

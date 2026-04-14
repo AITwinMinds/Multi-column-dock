@@ -16,9 +16,9 @@ import { parseHexColor } from './utils.js';
  */
 export const GroupContainer = GObject.registerClass(
 class GroupContainer extends St.BoxLayout {
-    _init(group, settings, dockView, scaleManager) {
+    _init(group, settings, dockView, scaleManager, dockPadding) {
         super._init({
-            vertical: true,
+            orientation: Clutter.Orientation.VERTICAL,
             style_class: 'dock-group-container',
             x_expand: true,
             y_expand: false,
@@ -29,6 +29,7 @@ class GroupContainer extends St.BoxLayout {
         this._settings = settings;
         this._dockView = dockView;
         this._scaleManager = scaleManager;
+        this._dockPadding = dockPadding || 0;
         this._collapsed = group.collapsed || false;
         
         // Enable DND
@@ -76,13 +77,14 @@ class GroupContainer extends St.BoxLayout {
 
         // Grid for icons (inside a container for the group background)
         this._contentBox = new St.BoxLayout({
-            vertical: true,
+            orientation: Clutter.Orientation.VERTICAL,
             style_class: 'dock-group-content',
             x_expand: true,
         });
 
-        // Keep layout tight but add a bit of breathing room under the icons
-        this._contentBox.set_style(`padding: 0 0 ${endPadding}px 0; spacing: 0px;`);
+        // Apply dock padding inside the group border, around icons
+        const dp = this._dockPadding;
+        this._contentBox.set_style(`padding: ${dp}px ${dp}px ${dp + endPadding}px ${dp}px; spacing: 0px;`);
 
         this._grid = new St.Widget({
             layout_manager: new Clutter.GridLayout({

@@ -394,6 +394,36 @@ export default class MultiColumnDockPreferences extends ExtensionPreferences {
         paddingScaleRow.add_suffix(paddingScaleSpin);
         dockGroup.add(paddingScaleRow);
 
+        const dockPaddingRow = new Adw.ActionRow({
+            title: 'Dock Padding (px)',
+            subtitle: 'Internal padding around dock content'
+        });
+        const dockPaddingSpin = Gtk.SpinButton.new_with_range(0, 32, 1);
+        settings.bind('dock-padding', dockPaddingSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        dockPaddingRow.add_suffix(dockPaddingSpin);
+        dockGroup.add(dockPaddingRow);
+
+        const shrinkRow = new Adw.SwitchRow({
+            title: 'Shrink to Content',
+            subtitle: 'Dock shrinks to fit its content instead of full screen edge'
+        });
+        settings.bind('shrink-to-content', shrinkRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        dockGroup.add(shrinkRow);
+
+        const centerRow = new Adw.SwitchRow({
+            title: 'Center Dock',
+            subtitle: 'Vertically center the dock when shrink-to-content is enabled'
+        });
+        settings.bind('center-dock', centerRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        dockGroup.add(centerRow);
+
+        const showAppsTopRow = new Adw.SwitchRow({
+            title: 'Show Apps Button at Top',
+            subtitle: 'Place the Show Apps button at the top of the dock'
+        });
+        settings.bind('show-apps-at-top', showAppsTopRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        dockGroup.add(showAppsTopRow);
+
         // Visual Style Group
         const styleGroup = new Adw.PreferencesGroup({
             title: 'Visual Style',
