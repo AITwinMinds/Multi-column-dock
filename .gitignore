@@ -8,6 +8,17 @@ schemas/gschemas.compiled
 
 # Package artifacts
 *.zip
+*.deb
+build/
+
+# Debian build artifacts
+debian/changelog
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/gnome-shell-extension-multi-column-dock/
+debian/*.substvars
+debian/*.debhelper.log
 
 # Editor files
 .vscode/

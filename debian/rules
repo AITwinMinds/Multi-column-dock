@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	install -d $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com
+	install -m 644 extension.js $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -m 644 dockView.js $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -m 644 groupContainer.js $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -m 644 badgeManager.js $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -m 644 scaleManager.js $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -m 644 utils.js $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -m 644 prefs.js $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -m 644 metadata.json $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -m 644 stylesheet.css $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/gnome-shell/extensions/AITwinMinds@gmail.com/
+	install -d $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/glib-2.0/schemas
+	install -m 644 schemas/org.gnome.shell.extensions.multicolumndock.gschema.xml $(CURDIR)/debian/gnome-shell-extension-multi-column-dock/usr/share/glib-2.0/schemas/

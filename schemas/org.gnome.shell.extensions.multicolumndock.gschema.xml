@@ -101,5 +101,25 @@
       <summary>Dock Position</summary>
       <description>Position of the dock on the screen. Valid values are: 'left', 'right'.</description>
     </key>
+    <key name="shrink-to-content" type="b">
+      <default>true</default>
+      <summary>Shrink to Content</summary>
+      <description>When enabled, the dock shrinks to fit its content instead of stretching the full screen edge.</description>
+    </key>
+    <key name="center-dock" type="b">
+      <default>true</default>
+      <summary>Center Dock</summary>
+      <description>When enabled together with shrink-to-content, the dock is vertically centered on the screen.</description>
+    </key>
+    <key name="show-apps-at-top" type="b">
+      <default>true</default>
+      <summary>Show Apps Button at Top</summary>
+      <description>When enabled, the Show Apps button is placed at the top of the dock instead of the bottom.</description>
+    </key>
+    <key name="dock-padding" type="i">
+      <default>0</default>
+      <summary>Dock Padding</summary>
+      <description>Internal padding of the dock container in pixels.</description>
+    </key>
   </schema>
 </schemalist>

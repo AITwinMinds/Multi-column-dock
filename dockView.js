@@ -70,7 +70,7 @@ export const DockView = GObject.registerClass(
 
             // Main container for groups and ungrouped apps
             this._mainContainer = new St.BoxLayout({
-                vertical: true,
+                orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
                 y_expand: false,
                 style_class: 'dock-main-container',
@@ -91,13 +91,13 @@ export const DockView = GObject.registerClass(
             this._grid.set_y_align(Clutter.ActorAlign.START);
             this._grid.set_x_expand(false);
             this._grid.set_y_expand(false);
-            this._grid.set_style('padding: 2px;');
+            this._grid.set_style('padding: 0;');
 
             this._mainContainer.add_child(this._grid);
 
             // Container for the content inside ScrollView
             this._scrollContent = new St.BoxLayout({
-                vertical: true,
+                orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
                 y_expand: false,
             });
@@ -110,13 +110,11 @@ export const DockView = GObject.registerClass(
                 vscrollbar_policy: St.PolicyType.AUTOMATIC,
                 overlay_scrollbars: true,
                 x_expand: true,
-                y_expand: true,
+                y_expand: false,
             });
             this._scrollView.set_child(this._scrollContent);
 
-            this.add_child(this._scrollView);
-
-            // Show Apps button
+            // Show Apps button (added before scroll view so it appears at the top)
             this._showAppsIcon = new St.Icon({
                 icon_name: 'view-app-grid-symbolic',
                 style_class: 'dock-show-apps-icon',
@@ -179,7 +177,61 @@ export const DockView = GObject.registerClass(
                     this._hideTooltip();
             });
 
-            this.add_child(this._showAppsButton);
+            // Order depends on show-apps-at-top setting
+            if (this._settings.get_boolean('show-apps-at-top')) {
+                this.add_child(this._showAppsButton);
+                this.add_child(this._scrollView);
+            } else {
+                this.add_child(this._scrollView);
+                this.add_child(this._showAppsButton);
+            }
+
+            // Trash button (always at the bottom)
+            this._trashIcon = new St.Icon({
+                icon_name: 'user-trash',
+                style_class: 'dock-show-apps-icon',
+            });
+
+            this._trashButton = new St.Button({
+                style_class: 'dock-show-apps',
+                reactive: true,
+                can_focus: true,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.START,
+                child: this._trashIcon,
+            });
+
+            // Monitor trash state
+            this._trashDir = Gio.File.new_for_uri('trash:///');
+            this._trashMonitor = this._trashDir.monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._trashMonitorId = this._trashMonitor.connect('changed', () => this._updateTrashIcon());
+            this._updateTrashIcon();
+
+            this._trashButton.connect('clicked', () => {
+                try {
+                    Gio.AppInfo.launch_default_for_uri('trash:///', null);
+                } catch (e) {
+                    log(`[Multi-Column Dock] Failed to open trash: ${e.message}`);
+                }
+            });
+
+            this._trashButton.connect('enter-event', () => {
+                this._showTooltip(this._trashButton, 'Trash');
+            });
+            this._trashButton.connect('leave-event', () => {
+                this._hideTooltip();
+            });
+
+            // Right-click menu for trash
+            this._trashButton.connect('button-press-event', (actor, event) => {
+                if (event.get_button() === 3) {
+                    this._showTrashMenu(event.get_time());
+                    return Clutter.EVENT_STOP;
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
+
+            this.add_child(this._trashButton);
 
             // Initial position will be set by _updateDockPosition called from extension
             // Store position for later use
@@ -256,7 +308,7 @@ export const DockView = GObject.registerClass(
 
             this._redisplay();
 
-            if (key === 'background-color' || key === 'background-opacity' || key === 'corner-radius' || key === 'dock-position') {
+            if (key === 'background-color' || key === 'background-opacity' || key === 'corner-radius' || key === 'dock-position' || key === 'dock-padding') {
                 this._updateStyle();
             }
         }
@@ -740,6 +792,17 @@ export const DockView = GObject.registerClass(
                 this._showAppsClickedId = 0;
             }
 
+            if (this._trashMonitorId && this._trashMonitor) {
+                this._trashMonitor.disconnect(this._trashMonitorId);
+                this._trashMonitorId = 0;
+                this._trashMonitor.cancel();
+                this._trashMonitor = null;
+            }
+            if (this._trashMenu) {
+                this._trashMenu.destroy();
+                this._trashMenu = null;
+            }
+
             if (this._tooltip) {
                 Main.layoutManager.uiGroup.remove_child(this._tooltip);
                 this._tooltip.destroy();
@@ -848,6 +911,22 @@ export const DockView = GObject.registerClass(
                 }
             });
 
+            // Also include apps assigned to groups (they may not be favorites or running)
+            if (enableGroups) {
+                for (let group of this._groups) {
+                    if (!group || !group.apps) continue;
+                    for (let appId of group.apps) {
+                        if (!seenIds.has(appId)) {
+                            let app = this._appSystem.lookup_app(appId);
+                            if (app) {
+                                allApps.push(app);
+                                seenIds.add(appId);
+                            }
+                        }
+                    }
+                }
+            }
+
             // Add padding around icons for breathing room
             // The padding is part of the clickable/hover area
             const paddingBase = this._settings.get_int('icon-padding-base');
@@ -868,11 +947,13 @@ export const DockView = GObject.registerClass(
                 // Plus extra buffer to prevent cutoff
                 const groupMargin = 4; // 2px margin on each side
                 const groupBorder = 4; // border allowance
-                const safetyBuffer = 16; // Extra space for scrollbars/rendering quirks
-                totalWidth = (totalIconSize * columns) + (cellSpacing * Math.max(0, columns - 1)) + groupMargin + groupBorder + safetyBuffer;
+                totalWidth = (totalIconSize * columns) + (cellSpacing * Math.max(0, columns - 1)) + groupMargin + groupBorder;
             } else {
-                totalWidth = (totalIconSize * columns) + (cellSpacing * Math.max(0, columns - 1)) + 16;
+                totalWidth = (totalIconSize * columns) + (cellSpacing * Math.max(0, columns - 1));
             }
+
+            const dockPadding = this._settings.get_int('dock-padding');
+            totalWidth += dockPadding * 2;
 
             this.set_width(totalWidth);
 
@@ -882,10 +963,19 @@ export const DockView = GObject.registerClass(
             // Size Show Apps button
             if (this._showAppsButton) {
                 this._showAppsButton.set_size(totalIconSize, totalIconSize);
-                this._showAppsButton.set_style(`border: none; box-shadow: none; padding: 2px; margin: 4px auto 6px auto;`);
+                this._showAppsButton.set_style(`border: none; box-shadow: none; padding: 0; margin: 6px auto 4px auto;`);
             }
             if (this._showAppsIcon) {
                 this._showAppsIcon.set_icon_size(iconSize);
+            }
+
+            // Size Trash button
+            if (this._trashButton) {
+                this._trashButton.set_size(totalIconSize, totalIconSize);
+                this._trashButton.set_style(`border: none; box-shadow: none; padding: 0; margin: 4px auto 6px auto;`);
+            }
+            if (this._trashIcon) {
+                this._trashIcon.set_icon_size(iconSize);
             }
 
             // Update tooltip styling
@@ -893,10 +983,10 @@ export const DockView = GObject.registerClass(
 
             if (enableGroups && this._groups.length > 0) {
                 // GROUP MODE: Render apps organized by groups
-                this._renderGroupedApps(allApps, columns, iconSize, totalIconSize, showUngrouped, groupSpacing, cellSpacing);
+                this._renderGroupedApps(allApps, columns, iconSize, totalIconSize, showUngrouped, groupSpacing, cellSpacing, dockPadding);
             } else {
                 // LEGACY MODE: Render apps in a simple grid
-                this._renderSimpleGrid(allApps, columns, iconSize, totalIconSize, cellSpacing);
+                this._renderSimpleGrid(allApps, columns, iconSize, totalIconSize, cellSpacing, dockPadding);
             }
 
             this.add_style_class_name('two-column-dock-container');
@@ -922,7 +1012,7 @@ export const DockView = GObject.registerClass(
         `);
         }
 
-        _renderSimpleGrid(apps, columns, iconSize, totalIconSize, cellSpacing) {
+        _renderSimpleGrid(apps, columns, iconSize, totalIconSize, cellSpacing, dockPadding) {
             // Create the legacy grid - vertical docks always use horizontal orientation (fill columns first)
             this._grid = new St.Widget({
                 layout_manager: new Clutter.GridLayout({
@@ -934,7 +1024,7 @@ export const DockView = GObject.registerClass(
             });
             this._grid.set_x_align(Clutter.ActorAlign.START);
             this._grid.set_y_align(Clutter.ActorAlign.START);
-            this._grid.set_style(`padding: 2px;`);
+            this._grid.set_style(`padding: ${dockPadding}px;`);
 
             const layout = this._grid.layout_manager;
             layout.set_column_homogeneous(true);
@@ -957,7 +1047,7 @@ export const DockView = GObject.registerClass(
             this._mainContainer.add_child(this._grid);
         }
 
-        _renderGroupedApps(apps, columns, iconSize, totalIconSize, showUngrouped, groupSpacing, cellSpacing) {
+        _renderGroupedApps(apps, columns, iconSize, totalIconSize, showUngrouped, groupSpacing, cellSpacing, dockPadding) {
             // Create a map of appId -> app for quick lookup
             const appMap = new Map();
             apps.forEach(app => appMap.set(app.get_id(), app));
@@ -1039,7 +1129,7 @@ export const DockView = GObject.registerClass(
                         apps: groupApps.map(app => app.get_id()),
                     } : group;
 
-                    let groupContainer = new GroupContainer(displayGroup, this._settings, this, this._scaleManager);
+                    let groupContainer = new GroupContainer(displayGroup, this._settings, this, this._scaleManager, dockPadding);
                     this._groupContainers.set(isOtherGroup ? 'ungrouped' : group.id, groupContainer);
 
                     // Add spacing between groups
@@ -1227,9 +1317,15 @@ export const DockView = GObject.registerClass(
                 if (wrapper._activateTimeoutId) {
                     GLib.source_remove(wrapper._activateTimeoutId);
                 }
+                const ctrlPressed = (event.get_state() & Clutter.ModifierType.CONTROL_MASK) !== 0;
                 wrapper._activateTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
                     wrapper._activateTimeoutId = 0;
-                    this._activateApp(app);
+                    if (ctrlPressed) {
+                        app.open_new_window(-1);
+                        Main.overview.hide();
+                    } else {
+                        this._activateApp(app);
+                    }
                     return GLib.SOURCE_REMOVE;
                 });
                 return Clutter.EVENT_STOP;
@@ -1426,6 +1522,58 @@ export const DockView = GObject.registerClass(
                 }
                 return GLib.SOURCE_REMOVE;
             });
+        }
+
+        _updateTrashIcon() {
+            try {
+                const enumerator = this._trashDir.enumerate_children(
+                    'standard::*', Gio.FileQueryInfoFlags.NONE, null);
+                const hasFiles = enumerator.next_file(null) !== null;
+                enumerator.close(null);
+                this._trashIcon.set_icon_name(
+                    hasFiles ? 'user-trash-full' : 'user-trash');
+            } catch (e) {
+                this._trashIcon.set_icon_name('user-trash');
+            }
+        }
+
+        _showTrashMenu(eventTime) {
+            if (!this._trashMenu) {
+                const dockPosition = this._settings.get_string('dock-position');
+                const menuSide = dockPosition === 'right' ? St.Side.RIGHT : St.Side.LEFT;
+                this._trashMenu = new PopupMenu.PopupMenu(this._trashButton, 0.5, menuSide, 0);
+                this._trashMenu.box.add_style_class_name('dock-app-menu');
+                Main.uiGroup.add_child(this._trashMenu.actor);
+                this._menuManager.addMenu(this._trashMenu);
+            } else {
+                this._trashMenu.removeAll();
+            }
+
+            const openItem = new PopupMenu.PopupMenuItem('Open Trash');
+            openItem.connect('activate', () => {
+                try {
+                    Gio.AppInfo.launch_default_for_uri('trash:///', null);
+                } catch (e) {
+                    log(`[Multi-Column Dock] Failed to open trash: ${e.message}`);
+                }
+            });
+            this._trashMenu.addMenuItem(openItem);
+
+            this._trashMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+            const emptyItem = new PopupMenu.PopupMenuItem('Empty Trash');
+            emptyItem.connect('activate', () => {
+                try {
+                    const proc = Gio.Subprocess.new(
+                        ['gio', 'trash', '--empty'],
+                        Gio.SubprocessFlags.NONE);
+                    proc.wait_async(null, () => this._updateTrashIcon());
+                } catch (e) {
+                    log(`[Multi-Column Dock] Failed to empty trash: ${e.message}`);
+                }
+            });
+            this._trashMenu.addMenuItem(emptyItem);
+            this._trashMenu.open(true);
         }
 
         _showTooltip(actor, text) {

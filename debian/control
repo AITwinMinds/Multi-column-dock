@@ -1,0 +1,23 @@
+Source: gnome-shell-extension-multi-column-dock
+Section: gnome
+Priority: optional
+Maintainer: Artel of Bots <artelofbots@nowhere.funny>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/AITwinMinds/Multi-column-dock
+Rules-Requires-Root: no
+
+Package: gnome-shell-extension-multi-column-dock
+Architecture: all
+Depends: gnome-shell (>= 45), libglib2.0-bin, ${misc:Depends}
+Description: Multi-column dock for GNOME Shell with app grouping
+ A customizable multi-column dock for GNOME Shell.
+ Keep your apps neatly organized with grouping, smooth scrolling,
+ easy drag-and-drop reordering, auto-hide, and full multi-monitor support.
+ .
+ Features:
+  - Collapsible app groups with custom colors
+  - Multi-column layout (1-5 columns)
+  - Auto-hide with hot zone
+  - HiDPI/4K support
+  - Notification badges
