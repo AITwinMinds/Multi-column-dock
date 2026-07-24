@@ -185,11 +185,14 @@ export const DockView = GObject.registerClass(
             // Store position for later use
             this._dockPosition = this._settings.get_string('dock-position');
 
-            // Auto-hide state
+            // Auto-hide and timeout state
             this._autoHideEnabled = false;
             this._isHidden = false;
             this._showTimeoutId = 0;
             this._hideTimeoutId = 0;
+            this._initTimeoutId = 0;
+            this._positionTimeoutId = 0;
+            this._activateNewWindowTimeoutId = 0;
             this._hotZone = null;
 
             // Badge tracking
@@ -212,6 +215,10 @@ export const DockView = GObject.registerClass(
             this._redisplay();
 
             // Initialize auto-hide after a short delay to ensure dock dimensions are calculated
+            if (this._initTimeoutId) {
+                GLib.source_remove(this._initTimeoutId);
+                this._initTimeoutId = 0;
+            }
             this._initTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
                 this._initTimeoutId = 0;
                 this._storeVisiblePosition();
@@ -687,7 +694,16 @@ export const DockView = GObject.registerClass(
         `);
         }
 
+        vfunc_destroy() {
+            this.destroy();
+            super.vfunc_destroy();
+        }
+
         destroy() {
+            if (this._destroyed)
+                return;
+            this._destroyed = true;
+
             // Clean up wrapper timeouts
             this._cleanupWrapperTimeouts();
 
@@ -699,6 +715,10 @@ export const DockView = GObject.registerClass(
             if (this._positionTimeoutId) {
                 GLib.source_remove(this._positionTimeoutId);
                 this._positionTimeoutId = 0;
+            }
+            if (this._activateNewWindowTimeoutId) {
+                GLib.source_remove(this._activateNewWindowTimeoutId);
+                this._activateNewWindowTimeoutId = 0;
             }
 
             // Clean up auto-hide resources
@@ -1411,7 +1431,13 @@ export const DockView = GObject.registerClass(
             const maxRetries = 10;
             const retryDelay = 100; // ms
 
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, retryDelay, () => {
+            if (this._activateNewWindowTimeoutId) {
+                GLib.source_remove(this._activateNewWindowTimeoutId);
+                this._activateNewWindowTimeoutId = 0;
+            }
+
+            this._activateNewWindowTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, retryDelay, () => {
+                this._activateNewWindowTimeoutId = 0;
                 let windows = app.get_windows().filter(w => !w.skip_taskbar);
                 if (windows.length > 0) {
                     // Sort by user time to get the newest window

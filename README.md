@@ -174,7 +174,7 @@ Groups can be reordered, collapsed, and styled individually!
 
 ## 🖥️ Requirements
 
-- GNOME Shell 45, 46, or 47
+- GNOME Shell 45, 46, 47, 48, 49, 50+ (Ubuntu 23.10 to Ubuntu 26.04+)
 - GLib 2.0
 
 ## 🗑️ Uninstallation

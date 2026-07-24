@@ -125,16 +125,20 @@ export default class MultiColumnDockExtension extends Extension {
         // Store visible position for auto-hide after positioning
         dock._storeVisiblePosition();
         
+        // Clear any existing position timeout before creating a new one
+        if (dock._positionTimeoutId) {
+            GLib.source_remove(dock._positionTimeoutId);
+            dock._positionTimeoutId = 0;
+        }
+
         // For right position, we need to reposition after the dock calculates its size
         if (dockPosition === 'right') {
-            // Clear any existing timeout before creating new one
-            if (dock._positionTimeoutId) {
-                GLib.source_remove(dock._positionTimeoutId);
-            }
             dock._positionTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
                 dock._positionTimeoutId = 0;
-                dock.set_x(monitor.x + monitor.width - dock.get_width());
-                dock._storeVisiblePosition();
+                if (dock.set_x && monitor) {
+                    dock.set_x(monitor.x + monitor.width - dock.get_width());
+                    dock._storeVisiblePosition();
+                }
                 return GLib.SOURCE_REMOVE;
             });
         }
