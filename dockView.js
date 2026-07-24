@@ -694,16 +694,7 @@ export const DockView = GObject.registerClass(
         `);
         }
 
-        vfunc_destroy() {
-            this.destroy();
-            super.vfunc_destroy();
-        }
-
         destroy() {
-            if (this._destroyed)
-                return;
-            this._destroyed = true;
-
             // Clean up wrapper timeouts
             this._cleanupWrapperTimeouts();
 
